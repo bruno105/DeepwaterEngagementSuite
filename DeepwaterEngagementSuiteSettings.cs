@@ -348,14 +348,56 @@ public class VoyageBorderModifier
 [Submenu(CollapsedByDefault = true)]
 public class VoyageChartModifier
 {
+    internal static readonly string[] ScopeValues = ["Adjacent", "Voyage", "Self"];
+
+    public VoyageChartModifier()
+    {
+        ScopeSelector = new CustomNode
+        {
+            DrawDelegate = () =>
+            {
+                var current = EffectiveScope.ToString();
+                if (ImGui.BeginCombo("Scope", current))
+                {
+                    foreach (var v in ScopeValues)
+                    {
+                        if (ImGui.Selectable(v, v == current))
+                            Scope.Value = v;
+                    }
+
+                    ImGui.EndCombo();
+                }
+            },
+        };
+    }
+
     public TextNode Id { get; set; } = new TextNode("");
     public RangeNode<float> Weight { get; set; } = new RangeNode<float>(0, 0, 100);
+
+    // Legado: mantido para migração de perfis antigos; escondido do menu.
+    [IgnoreMenu]
     public ToggleNode IsGlobal { get; set; } = new ToggleNode(false);
+
+    [IgnoreMenu]
+    public TextNode Scope { get; set; } = new TextNode("");
+
+    [JsonIgnore]
+    public CustomNode ScopeSelector { get; set; }
+
     public ColorNode HighlightColor { get; set; } = Color.Violet;
+
+    [JsonIgnore]
+    public VoyagePlannerData.ModScope EffectiveScope => Scope.Value switch
+    {
+        "Voyage" => VoyagePlannerData.ModScope.Voyage,
+        "Self" => VoyagePlannerData.ModScope.Self,
+        "Adjacent" => VoyagePlannerData.ModScope.Adjacent,
+        _ => IsGlobal.Value ? VoyagePlannerData.ModScope.Voyage : VoyagePlannerData.ModScope.Adjacent,
+    };
 
     public override string ToString()
     {
-        return $"{Id.Value} {Weight.Value}###";
+        return $"{Id.Value} {Weight.Value} {EffectiveScope}###";
     }
 }
 

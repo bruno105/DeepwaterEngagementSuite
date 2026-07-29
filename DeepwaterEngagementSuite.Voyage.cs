@@ -177,7 +177,12 @@ public partial class DeepwaterEngagementSuite
                     var chartMod = Settings.VoyageSettings.ChartModifiers.Content
                         .FirstOrDefault(cm => cm.Id.Value.Equals(im.RawName, StringComparison.OrdinalIgnoreCase));
                     var displayName = TrimChartPrefix(im.RawName);
-                    var prefix = chartMod?.IsGlobal.Value == true ? "[G] " : "";
+                    var prefix = chartMod?.EffectiveScope switch
+                    {
+                        ModScope.Voyage => "[G] ",
+                        ModScope.Self => "[S] ",
+                        _ => "",
+                    };
                     var weight = chartMod?.Weight.Value ?? 0;
                     var chartName = $"{prefix}{displayName}\n({weight:F1})";
                     var textSize = Graphics.MeasureText(chartName);
@@ -293,8 +298,7 @@ public partial class DeepwaterEngagementSuite
                                 var chartMod = Settings.VoyageSettings.ChartModifiers.Content
                                     .FirstOrDefault(cm => cm.Id.Value.Equals(im.RawName, StringComparison.OrdinalIgnoreCase));
                                 var configuredWeight = chartMod?.Weight.Value;
-                                return new Modifier(im.RawName, configuredWeight ?? 0,
-                                    chartMod?.IsGlobal.Value == true ? ModScope.Voyage : ModScope.Adjacent);
+                                return new Modifier(im.RawName, configuredWeight ?? 0, chartMod?.EffectiveScope ?? ModScope.Adjacent);
                             }) ?? []
                             ]);
                         pieces.Add(mp);
