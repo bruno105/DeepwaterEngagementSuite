@@ -154,6 +154,10 @@ public partial class DeepwaterEngagementSuite : BaseSettingsPlugin<DeepwaterEnga
         _pathfindingData = GameController.IngameState.Data.RawPathfindingData;
         _areaDimensions = GameController.IngameState.Data.AreaDimensions;
         _shapeCache.Clear();
+        _rerollCount = 0;
+        _lastBorderKey = null;
+        _baselineScore = null;
+        _baselineKey = null;
     }
 
     private ExpeditionEntityType GetEntityType(string path)

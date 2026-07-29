@@ -26,6 +26,10 @@ public partial class DeepwaterEngagementSuite
 {
     private VoyageSolutionResult _result;
     private readonly System.Collections.Concurrent.ConcurrentQueue<string> _unknownBiomes = new();
+    private int _rerollCount;
+    private string _lastBorderKey;
+    private double? _baselineScore;
+    private string _baselineKey;
     private Task _run;
     private SyncTask<bool> _voyagePlaceTask;
     private VoyagePlanner _voyagePlanner;
@@ -171,6 +175,17 @@ public partial class DeepwaterEngagementSuite
         }
 
         var modsPerTileIndex = GetTileMods(tree);
+
+        var borderKey = string.Join("|", tree.Data.BorderMods.Select(m => m.RawName));
+        if (!string.IsNullOrEmpty(borderKey) && _lastBorderKey != null && borderKey != _lastBorderKey)
+        {
+            _rerollCount++;
+        }
+
+        if (!string.IsNullOrEmpty(borderKey))
+        {
+            _lastBorderKey = borderKey;
+        }
 
         var tiles = tree.Tiles;
         for (var index = 0; index < tiles.Count; index++)
@@ -363,6 +378,29 @@ public partial class DeepwaterEngagementSuite
                     _voyageNodesPruned = r.NodesPruned;
                 }
 
+                // Baseline p/ reroll advisor: mesmo pool de charts, borders "médios".
+                var piecesKey = string.Join("|", pieces.Select(p =>
+                    $"{p.Id}:{p.Type}:{(int)p.BaseConnections}:{p.OwnModifier:F2}:{p.LocalModifier:F2}:{p.GlobalModifier:F2}"));
+                var positionWeights = PositionWeightMap.ScreenToGrid(Settings.VoyageSettings.PositionWeights);
+                if (piecesKey != _baselineKey)
+                {
+                    var avg = Settings.VoyageSettings.BorderModifiers.Content
+                        .Select(b => (double)b.ValueMultiplier.Value)
+                        .DefaultIfEmpty(1)
+                        .Average();
+                    var baselineMults = RerollAdvisor.BuildBaselineMultipliers(avg, positionWeights, RerollAdvisor.BorderModCountPerTile);
+                    var baselinePlanner = new VoyagePlanner();
+                    double baselineScore = 0;
+                    foreach (var br in baselinePlanner.Solve(new VoyagePuzzle(pieces, baselineMults, []),
+                                 new VoyagePlannerSettings(TopN: 1, TimeLimitSeconds: timeLimitSetting)))
+                    {
+                        baselineScore = br.Solutions.FirstOrDefault()?.TotalScore ?? baselineScore;
+                    }
+
+                    _baselineScore = baselineScore;
+                    _baselineKey = piecesKey;
+                }
+
                 if (_voyageStopwatch.Elapsed.TotalSeconds >= timeLimitSetting)
                     _voyageTimedOut = true;
 
@@ -406,6 +444,42 @@ public partial class DeepwaterEngagementSuite
         if (_voyageSolving || _result != null)
         {
             ImGui.Text($"Nodes: {_voyageNodesExplored:N0} explored, {_voyageNodesPruned:N0} pruned");
+        }
+
+        if (Settings.VoyageSettings.ShowRerollAdvisor.Value &&
+            _result is { Solutions.Count: > 0 } &&
+            _baselineScore is > 0)
+        {
+            var ratio = _result.Solutions[0].TotalScore / _baselineScore.Value;
+            var keep = RerollAdvisor.ShouldKeep(ratio, Settings.VoyageSettings.RerollKeepThreshold.Value);
+            ImGui.TextColored((keep ? Color.LightGreen : Color.OrangeRed).ToImguiVec4(),
+                keep
+                    ? $"Borders: R={ratio:F2} — KEEP"
+                    : $"Borders: R={ratio:F2} — REROLL (próximo: {RerollAdvisor.NextCost(_rerollCount):N0} sulphur)");
+
+            int? sulphur = null;
+            try
+            {
+                sulphur = GameController.IngameState.ServerData.DeepwaterHandler?.Sulphur;
+            }
+            catch
+            {
+                // fora de contexto deepwater o handler pode não estar legível
+            }
+
+            if (sulphur != null)
+            {
+                ImGui.SameLine();
+                ImGui.Text($"(sulphur: {sulphur:N0})");
+            }
+
+            ImGui.Text($"Rerolls nesta board: {_rerollCount}");
+            ImGui.SameLine();
+            if (ImGui.SmallButton("+")) _rerollCount++;
+            ImGui.SameLine();
+            if (ImGui.SmallButton("-")) _rerollCount = Math.Max(0, _rerollCount - 1);
+            ImGui.SameLine();
+            if (ImGui.SmallButton("reset")) _rerollCount = 0;
         }
 
         if (_result == null || _result.Solutions.Count == 0)

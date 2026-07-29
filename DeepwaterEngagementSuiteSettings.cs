@@ -229,6 +229,11 @@ public class VoyageSettings
     public RangeNode<int> SolverTimeLimitSeconds { get; set; } = new RangeNode<int>(5, 1, 120);
     public RangeNode<float> BorderHighlightThreshold { get; set; } = new RangeNode<float>(1.01f, 0, 10);
     public RangeNode<float> ChartHighlightThreshold { get; set; } = new RangeNode<float>(1.0f, 0, 10);
+
+    public ToggleNode ShowRerollAdvisor { get; set; } = new ToggleNode(true);
+
+    [Menu("Reroll keep threshold", "R = melhor score atual / score com borders medios. Abaixo disso o advisor recomenda reroll.")]
+    public RangeNode<float> RerollKeepThreshold { get; set; } = new RangeNode<float>(1.0f, 0f, 3f);
     public ListNode ProfileSelector { get; set; } = new ListNode();
     [JsonIgnore] public ButtonNode AddProfile { get; set; } = new ButtonNode();
     [JsonIgnore] public ButtonNode ReloadProfiles { get; set; } = new ButtonNode();
