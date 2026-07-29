@@ -35,6 +35,9 @@ public class VoyagePlanner
     private record struct PieceOption(int PieceIdx, int Rotation, Direction Connections, double LocalWeight, double GlobalWeight);
     private PieceOption[][] _pieceOptionsByGroup;
     private int[] _pieceToGroup;
+    // Ordem de tentativa: mais conexões primeiro (acha o primeiro board conectado rápido,
+    // habilitando a poda por upper bound), valor como desempate.
+    private int[] _pieceOrder;
 
     public IEnumerable<VoyageSolutionResult> Solve(VoyagePuzzle puzzle, VoyagePlannerSettings settings = null)
     {
@@ -96,6 +99,15 @@ public class VoyagePlanner
             }
             _pieceOptionsByGroup[g] = opts.ToArray();
         }
+
+        _pieceOrder = Enumerable.Range(0, puzzle.AvailablePieces.Count)
+            .OrderByDescending(i => CountConnections(puzzle.AvailablePieces[i].BaseConnections))
+            .ThenByDescending(i =>
+            {
+                var p = puzzle.AvailablePieces[i];
+                return p.OwnModifier + p.LocalModifier + p.GlobalModifier;
+            })
+            .ToArray();
 
         // Handle locked placements
         var lockedCells = puzzle.LockedPlacements
@@ -257,7 +269,7 @@ public class VoyagePlanner
         var result = new List<(int, int, Direction)>();
         var triedGroups = new HashSet<int>();
 
-        for (var i = 0; i < _pieceUsed.Length; i++)
+        foreach (var i in _pieceOrder)
         {
             if (_pieceUsed[i]) continue;
             var g = _pieceToGroup[i];

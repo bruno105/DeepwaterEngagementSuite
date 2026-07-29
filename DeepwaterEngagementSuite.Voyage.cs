@@ -358,6 +358,22 @@ public partial class DeepwaterEngagementSuite
                     i++;
                 }
 
+                var maxCharts = Settings.VoyageSettings.SolverMaxCharts.Value;
+                if (maxCharts > 0 && pieces.Count > maxCharts)
+                {
+                    pieces = pieces
+                        .OrderByDescending(p => p.OwnModifier + p.LocalModifier + p.GlobalModifier)
+                        .ThenByDescending(p => p.BaseConnections switch
+                        {
+                            Direction.All => 4,
+                            var d when int.PopCount((int)d) == 3 => 3,
+                            var d when int.PopCount((int)d) == 2 => 2,
+                            _ => 1,
+                        })
+                        .Take(maxCharts)
+                        .ToList();
+                }
+
                 var modsPerTileIndex = GetTileMods(tree);
                 var boardMultipliers = modsPerTileIndex.Select(x => (x.Key,
                     x.Value.Select(m => Settings.VoyageSettings.BorderModifiers.Content.FirstOrDefault(c => c.Id.Value == m.RawName)?.ValueMultiplier.Value ?? 1)
@@ -466,17 +482,17 @@ public partial class DeepwaterEngagementSuite
             var nextCost = RerollAdvisor.NextCost(_rerollCount);
             if (keep)
             {
-                ImGui.TextColored(Color.LightGreen.ToImguiVec4(), $"Borders: R={ratio:F2} — KEEP");
+                ImGui.TextColored(Color.LightGreen.ToImguiVec4(), $"Borders: R={ratio:F2} - KEEP");
             }
             else if (sulphur is { } s && s < nextCost)
             {
                 ImGui.TextColored(Color.Yellow.ToImguiVec4(),
-                    $"Borders: R={ratio:F2} — REROLL quando puder (sulphur: {s:N0}/{nextCost:N0})");
+                    $"Borders: R={ratio:F2} - REROLL quando puder (sulphur: {s:N0}/{nextCost:N0})");
             }
             else
             {
                 ImGui.TextColored(Color.OrangeRed.ToImguiVec4(),
-                    $"Borders: R={ratio:F2} — REROLL (próximo: {nextCost:N0} sulphur)");
+                    $"Borders: R={ratio:F2} - REROLL (proximo: {nextCost:N0} sulphur)");
             }
 
             if (sulphur != null && (keep || sulphur >= nextCost))
@@ -502,7 +518,7 @@ public partial class DeepwaterEngagementSuite
             }
             else if (_voyageTimedOut)
             {
-                ImGui.TextColored(Color.Orange.ToImguiVec4(), "Time limit reached — no valid solution found.");
+                ImGui.TextColored(Color.Orange.ToImguiVec4(), "Time limit reached - no valid solution found.");
             }
             else
             {
@@ -515,7 +531,7 @@ public partial class DeepwaterEngagementSuite
 
         if (_voyageTimedOut)
         {
-            ImGui.TextColored(Color.Orange.ToImguiVec4(), $"Time limit reached — showing best solutions found so far (may not be optimal).");
+            ImGui.TextColored(Color.Orange.ToImguiVec4(), $"Time limit reached - showing best solutions found so far (may not be optimal).");
         }
 
         _selectedSolutionIndex = Math.Clamp(_selectedSolutionIndex, 0, _result.Solutions.Count - 1);

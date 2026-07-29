@@ -227,6 +227,9 @@ public class VoyageSettings
 
     [Menu("Solver time limit (seconds)", "Max time the solver runs before returning the best solution found so far. 0 = no limit.")]
     public RangeNode<int> SolverTimeLimitSeconds { get; set; } = new RangeNode<int>(5, 1, 120);
+
+    [Menu("Solver max charts", "Considera apenas os N melhores charts do estoque no solve (por peso). 0 = sem limite.")]
+    public RangeNode<int> SolverMaxCharts { get; set; } = new RangeNode<int>(24, 0, 200);
     public RangeNode<float> BorderHighlightThreshold { get; set; } = new RangeNode<float>(1.01f, 0, 10);
     public RangeNode<float> ChartHighlightThreshold { get; set; } = new RangeNode<float>(1.0f, 0, 10);
 
