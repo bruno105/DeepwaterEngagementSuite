@@ -184,6 +184,29 @@ public class VoyageSettings
     {
         ClearBorderModifiers = new ButtonNode() { OnPressed = () => { BorderModifiers.Content.Clear(); } };
         ClearChartModifiers = new ButtonNode() { OnPressed = () => { ChartModifiers.Content.Clear(); } };
+        PositionWeightsNode = new CustomNode
+        {
+            DrawDelegate = () =>
+            {
+                ImGui.TextUnformatted("Position weights (top row = topo do board no jogo)");
+                for (var row = 0; row < 3; row++)
+                {
+                    for (var col = 0; col < 3; col++)
+                    {
+                        if (col > 0) ImGui.SameLine();
+                        ImGui.PushID(row * 3 + col);
+                        ImGui.SetNextItemWidth(100);
+                        var v = PositionWeights[row][col];
+                        if (ImGui.SliderFloat("##pw", ref v, 0f, 2f, "%.2f"))
+                            PositionWeights[row][col] = v;
+                        ImGui.PopID();
+                    }
+                }
+
+                if (ImGui.Button("Reset position defaults"))
+                    PositionWeights = DefaultPositionWeights();
+            },
+        };
     }
 
     [JsonIgnore] [IgnoreMenu] public List<VoyageProfileEntry> Profiles { get; set; } = new();
@@ -211,6 +234,18 @@ public class VoyageSettings
     [JsonIgnore] public ButtonNode ReloadProfiles { get; set; } = new ButtonNode();
     [JsonIgnore][Menu("Delete current profile (hold shift)")] public ButtonNode DeleteCurrentProfile { get; set; } = new ButtonNode();
     [JsonIgnore] public CustomNode ProfileRenameNode { get; set; } = new CustomNode();
+
+    public float[][] PositionWeights { get; set; } = DefaultPositionWeights();
+
+    [JsonIgnore]
+    public CustomNode PositionWeightsNode { get; set; }
+
+    public static float[][] DefaultPositionWeights() =>
+    [
+        [1.00f, 0.15f, 1.00f],
+        [1.10f, 0.90f, 1.00f],
+        [1.15f, 1.05f, 1.00f],
+    ];
 
     [JsonIgnore]
     public ButtonNode ClearBorderModifiers { get; set; }

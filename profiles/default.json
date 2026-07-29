@@ -1,4 +1,9 @@
 {
+  "PositionWeights": [
+    [1.00, 0.15, 1.00],
+    [1.10, 0.90, 1.00],
+    [1.15, 1.05, 1.00]
+  ],
   "BorderModifiers": [
     {"Id": "DeepwaterBorderPackSize1", "Abbreviation": "PackSize1", "ValueMultiplier": 1.2},
     {"Id": "DeepwaterBorderPackSize2", "Abbreviation": "PackSize2", "ValueMultiplier": 1.3},

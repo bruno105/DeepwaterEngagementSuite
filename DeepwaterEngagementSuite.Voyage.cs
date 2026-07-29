@@ -307,10 +307,10 @@ public partial class DeepwaterEngagementSuite
                 var boardMultipliers = modsPerTileIndex.Select(x => (x.Key,
                     x.Value.Select(m => Settings.VoyageSettings.BorderModifiers.Content.FirstOrDefault(c => c.Id.Value == m.RawName)?.ValueMultiplier.Value ?? 1)
                         .Aggregate(1f, (a, b) => a * b))).ToList();
-                var tileMultiplierArray = new double[3, 3];
+                var tileMultiplierArray = PositionWeightMap.ScreenToGrid(Settings.VoyageSettings.PositionWeights);
                 foreach (var boardMultiplier in boardMultipliers)
                 {
-                    tileMultiplierArray[boardMultiplier.Key / 3, boardMultiplier.Key % 3] = boardMultiplier.Item2;
+                    tileMultiplierArray[boardMultiplier.Key / 3, boardMultiplier.Key % 3] *= boardMultiplier.Item2;
                 }
 
                 _voyagePlanner = new VoyagePlanner();

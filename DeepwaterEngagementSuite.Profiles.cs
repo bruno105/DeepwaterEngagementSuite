@@ -95,6 +95,10 @@ public partial class DeepwaterEngagementSuite
         {
             vs.ChartModifiers.Content.Add(mod);
         }
+
+        vs.PositionWeights = entry.Profile.PositionWeights is { Length: 3 } pw
+            ? pw.Select(r => r.ToArray()).ToArray()
+            : VoyageSettings.DefaultPositionWeights();
     }
 
     private void OnProfileSelected(string name)
@@ -126,6 +130,8 @@ public partial class DeepwaterEngagementSuite
         {
             entry.Profile.ChartModifiers.Add(mod);
         }
+
+        entry.Profile.PositionWeights = Settings.VoyageSettings.PositionWeights.Select(r => r.ToArray()).ToArray();
 
         var path = Path.Combine(_profilesDirectory, $"{name}.json");
         try
