@@ -270,6 +270,9 @@ public class VoyageSettings
 
     [Menu("Reroll keep threshold", "R = melhor score atual / score com borders medios. Abaixo disso o advisor recomenda reroll.")]
     public RangeNode<float> RerollKeepThreshold { get; set; } = new RangeNode<float>(1.0f, 0f, 3f);
+
+    [IgnoreMenu]
+    public TextNode SelectedStrategy { get; set; } = new TextNode("Auto");
     public ListNode ProfileSelector { get; set; } = new ListNode();
     [JsonIgnore] public ButtonNode AddProfile { get; set; } = new ButtonNode();
     [JsonIgnore] public ButtonNode ReloadProfiles { get; set; } = new ButtonNode();

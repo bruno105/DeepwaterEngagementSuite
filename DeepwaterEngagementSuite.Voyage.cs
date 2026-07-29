@@ -29,7 +29,12 @@ public partial class DeepwaterEngagementSuite
     private readonly Dictionary<long, (MapPiece Piece, int ExplicitCount)> _chartValueCache = new();
     private int _rerollCount;
     private string _lastBorderKey;
+    private (string Name, double Score, bool ReqMet)[] _strategyScores = [];
+    private DateTime _lastStrategyEval = DateTime.MinValue;
+    private VoyageStrategy _activeStrategy;
     private Task _run;
+
+    private static readonly string[] StrategyChoices = ["Auto", "Speedrun", "Meatfish", "DivineBorder", "Base"];
     private SyncTask<bool> _voyagePlaceTask;
     private VoyagePlanner _voyagePlanner;
     private int _selectedSolutionIndex = 0;
@@ -371,20 +376,59 @@ public partial class DeepwaterEngagementSuite
             }, rotation, modifiers);
     }
 
-    /// <summary>Multiplicadores efetivos por célula do grid: P[r,c] × produto dos border mods do tile.</summary>
-    private double[,] ComputeEffectiveMultipliers(VoyageWindow tree)
+    /// <summary>Multiplicadores efetivos por célula: P[r,c] × produto dos border mods do tile (boostados pela estratégia, se houver).</summary>
+    private double[,] ComputeEffectiveMultipliers(VoyageWindow tree, VoyageStrategy strategy = null)
     {
         var result = PositionWeightMap.ScreenToGrid(Settings.VoyageSettings.PositionWeights);
         foreach (var (tileIndex, mods) in GetTileMods(tree))
         {
             var mult = mods
-                .Select(m => Settings.VoyageSettings.BorderModifiers.Content
-                    .FirstOrDefault(c => c.Id.Value == m.RawName)?.ValueMultiplier.Value ?? 1)
-                .Aggregate(1f, (a, b) => a * b);
+                .Select(m =>
+                {
+                    var baseMult = (double)(Settings.VoyageSettings.BorderModifiers.Content
+                        .FirstOrDefault(c => c.Id.Value == m.RawName)?.ValueMultiplier.Value ?? 1);
+                    return strategy?.BoostBorderMultiplier(m.RawName, baseMult) ?? baseMult;
+                })
+                .Aggregate(1.0, (a, b) => a * b);
             result[tileIndex / 3, tileIndex % 3] *= mult;
         }
 
         return result;
+    }
+
+    /// <summary>Peças do pool completo (cache por address; Id pode divergir do índice atual — não usar para cliques).</summary>
+    private List<MapPiece> GetChartPieces(List<NormalInventoryItem> charts)
+    {
+        var list = new List<MapPiece>();
+        for (var i = 0; i < charts.Count; i++)
+        {
+            var addr = charts[i].Address;
+            if (!_chartValueCache.TryGetValue(addr, out var entry))
+            {
+                entry = (BuildMapPiece(charts[i], i),
+                    charts[i].Item.GetComponent<Mods>()?.ExplicitMods?.Count ?? 0);
+                _chartValueCache[addr] = entry;
+            }
+
+            if (entry.Piece != null)
+            {
+                list.Add(entry.Piece);
+            }
+        }
+
+        return list;
+    }
+
+    private VoyageStrategy ResolveStrategy(string choice)
+    {
+        return choice switch
+        {
+            "Base" => null,
+            "Auto" => _strategyScores.Length > 0
+                ? VoyageStrategy.DocStrategies.FirstOrDefault(s => s.Name == _strategyScores.MaxBy(x => x.Score).Name)
+                : null,
+            var name => VoyageStrategy.DocStrategies.FirstOrDefault(s => s.Name == name),
+        };
     }
 
     private static Dictionary<int, List<ItemMod>> GetTileMods(VoyageWindow tree)
@@ -433,6 +477,7 @@ public partial class DeepwaterEngagementSuite
             _voyageElapsed = 0;
             _voyageTimedOut = false;
             _voyageStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var solveStrategy = _activeStrategy;
             _run = Task.Run(() =>
             {
                 var i = 0;
@@ -441,7 +486,7 @@ public partial class DeepwaterEngagementSuite
                 {
                     if (BuildMapPiece(chart, i) is { } mp)
                     {
-                        pieces.Add(mp);
+                        pieces.Add(solveStrategy?.BoostPiece(mp) ?? mp);
                     }
 
                     i++;
@@ -463,7 +508,7 @@ public partial class DeepwaterEngagementSuite
                         .ToList();
                 }
 
-                var tileMultiplierArray = ComputeEffectiveMultipliers(tree);
+                var tileMultiplierArray = ComputeEffectiveMultipliers(tree, solveStrategy);
 
                 _voyagePlanner = new VoyagePlanner();
                 var timeLimitSetting = Settings.VoyageSettings.SolverTimeLimitSeconds.Value;
@@ -515,11 +560,68 @@ public partial class DeepwaterEngagementSuite
 
         ImGui.Spacing();
 
+        // Avaliação das estratégias do doc sobre o POOL COMPLETO de charts + borders atuais.
+        if (tree.Data.BorderMods.Count >= 12)
+        {
+            if ((DateTime.UtcNow - _lastStrategyEval).TotalSeconds >= 1)
+            {
+                _lastStrategyEval = DateTime.UtcNow;
+                var allPieces = GetChartPieces(GetAvailableCharts());
+                var borderIds = tree.Data.BorderMods.Select(m => m.RawName).ToList();
+                _strategyScores = VoyageStrategy.DocStrategies.Select(s =>
+                {
+                    var eff = ComputeEffectiveMultipliers(tree, s);
+                    var sum = 0.0;
+                    for (var r = 0; r < 3; r++)
+                        for (var c = 0; c < 3; c++)
+                            sum += eff[r, c];
+                    return (s.Name, Score: s.ScoreBoard(allPieces, sum, borderIds), ReqMet: s.RequirementsMet(borderIds));
+                }).ToArray();
+            }
+
+            if (_strategyScores.Length > 0)
+            {
+                var bestName = _strategyScores.MaxBy(x => x.Score).Name;
+                ImGui.Text("Estrategias:");
+                foreach (var (name, score, reqMet) in _strategyScores)
+                {
+                    ImGui.SameLine();
+                    var color = name == bestName ? Color.LightGreen : Color.Gray;
+                    ImGui.TextColored(color.ToImguiVec4(), $"{name}: {score:F0}{(reqMet ? "" : " (sem border)")}");
+                }
+
+                var current = Settings.VoyageSettings.SelectedStrategy.Value;
+                if (!StrategyChoices.Contains(current))
+                {
+                    current = "Auto";
+                }
+
+                ImGui.SetNextItemWidth(140);
+                if (ImGui.BeginCombo("Strategy", current))
+                {
+                    foreach (var choice in StrategyChoices)
+                    {
+                        if (ImGui.Selectable(choice, choice == current))
+                        {
+                            Settings.VoyageSettings.SelectedStrategy.Value = choice;
+                        }
+                    }
+
+                    ImGui.EndCombo();
+                }
+
+                _activeStrategy = ResolveStrategy(Settings.VoyageSettings.SelectedStrategy.Value is { Length: > 0 } v ? v : "Auto");
+                ImGui.SameLine();
+                ImGui.Text($"usando: {_activeStrategy?.Name ?? "Base"}");
+            }
+        }
+
         if (Settings.VoyageSettings.ShowRerollAdvisor.Value && tree.Data.BorderMods.Count >= 12)
         {
-            var effective = ComputeEffectiveMultipliers(tree);
+            var effective = ComputeEffectiveMultipliers(tree, _activeStrategy);
             var avg = Settings.VoyageSettings.BorderModifiers.Content
-                .Select(b => (double)b.ValueMultiplier.Value)
+                .Select(b => _activeStrategy?.BoostBorderMultiplier(b.Id.Value, b.ValueMultiplier.Value)
+                             ?? (double)b.ValueMultiplier.Value)
                 .DefaultIfEmpty(1)
                 .Average();
             var positionWeights = PositionWeightMap.ScreenToGrid(Settings.VoyageSettings.PositionWeights);
