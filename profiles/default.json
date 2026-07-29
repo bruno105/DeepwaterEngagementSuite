@@ -4,6 +4,11 @@
     [1.10, 0.90, 1.00],
     [1.15, 1.05, 1.00]
   ],
+  "BiomeWeights": [
+    {"Id": "SeafloorRidges", "Weight": 15.0},
+    {"Id": "AbyssalPlain", "Weight": 12.0},
+    {"Id": "UnderseaGroves", "Weight": 10.0}
+  ],
   "BorderModifiers": [
     {"Id": "DeepwaterBorderPackSize1", "Abbreviation": "PackSize1", "ValueMultiplier": 1.2},
     {"Id": "DeepwaterBorderPackSize2", "Abbreviation": "PackSize2", "ValueMultiplier": 1.3},

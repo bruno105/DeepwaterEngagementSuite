@@ -13,6 +13,7 @@ using ExileCore.PoEMemory.MemoryObjects;
 using ExileCore.Shared;
 using ExileCore.Shared.Enums;
 using ExileCore.Shared.Helpers;
+using ExileCore.Shared.Nodes;
 using GameOffsets.Native;
 using ImGuiNET;
 using SharpDX;
@@ -24,6 +25,7 @@ namespace DeepwaterEngagementSuite;
 public partial class DeepwaterEngagementSuite
 {
     private VoyageSolutionResult _result;
+    private readonly System.Collections.Concurrent.ConcurrentQueue<string> _unknownBiomes = new();
     private Task _run;
     private SyncTask<bool> _voyagePlaceTask;
     private VoyagePlanner _voyagePlanner;
@@ -156,6 +158,18 @@ public partial class DeepwaterEngagementSuite
 
         TaskUtils.RunOrRestart(ref _voyagePlaceTask, () => null);
 
+        while (_unknownBiomes.TryDequeue(out var newBiomeId))
+        {
+            if (!Settings.VoyageSettings.BiomeWeights.Content
+                    .Any(b => b.Id.Value.Equals(newBiomeId, StringComparison.OrdinalIgnoreCase)))
+            {
+                Settings.VoyageSettings.BiomeWeights.Content.Add(new BiomeWeightSetting
+                {
+                    Id = new TextNode(newBiomeId),
+                });
+            }
+        }
+
         var modsPerTileIndex = GetTileMods(tree);
 
         var tiles = tree.Tiles;
@@ -283,6 +297,36 @@ public partial class DeepwaterEngagementSuite
                     if (chart.Item.TryGetComponent(out DeepwaterChart c))
                     {
                         var rotation = ((Direction)c.Room.Path);
+                        var itemMods = chart.Item.GetComponent<Mods>();
+                        var modifiers = new List<Modifier> { new("Default", 1) };
+
+                        void AddItemMods(IEnumerable<ItemMod> source, ModScope defaultScope)
+                        {
+                            foreach (var im in source ?? [])
+                            {
+                                var chartMod = Settings.VoyageSettings.ChartModifiers.Content
+                                    .FirstOrDefault(cm => cm.Id.Value.Equals(im.RawName, StringComparison.OrdinalIgnoreCase));
+                                modifiers.Add(new Modifier(im.RawName, chartMod?.Weight.Value ?? 0,
+                                    chartMod?.EffectiveScope ?? defaultScope));
+                            }
+                        }
+
+                        AddItemMods(itemMods?.ImplicitMods, ModScope.Adjacent);
+                        AddItemMods(itemMods?.ExplicitMods, ModScope.Self);
+
+                        var biomeId = c.Room?.Biome?.Id;
+                        if (!string.IsNullOrEmpty(biomeId))
+                        {
+                            var biome = Settings.VoyageSettings.BiomeWeights.Content
+                                .FirstOrDefault(b => b.Id.Value.Equals(biomeId, StringComparison.OrdinalIgnoreCase));
+                            if (biome == null)
+                            {
+                                _unknownBiomes.Enqueue(biomeId);
+                            }
+
+                            modifiers.Add(new Modifier($"Biome:{biomeId}", biome?.Weight.Value ?? 0, ModScope.Self));
+                        }
+
                         var mp = new MapPiece(i,
                             int.PopCount((int)rotation) switch
                             {
@@ -292,15 +336,7 @@ public partial class DeepwaterEngagementSuite
                                 2 => rotation.HasFlag(Direction.Left) == rotation.HasFlag(Direction.Right)
                                     ? PieceType.Straight
                                     : PieceType.Corner
-                            }, rotation, [
-                                new Modifier("Default", 1), ..chart.Item.GetComponent<Mods>()?.ImplicitMods.Select(im =>
-                            {
-                                var chartMod = Settings.VoyageSettings.ChartModifiers.Content
-                                    .FirstOrDefault(cm => cm.Id.Value.Equals(im.RawName, StringComparison.OrdinalIgnoreCase));
-                                var configuredWeight = chartMod?.Weight.Value;
-                                return new Modifier(im.RawName, configuredWeight ?? 0, chartMod?.EffectiveScope ?? ModScope.Adjacent);
-                            }) ?? []
-                            ]);
+                            }, rotation, modifiers);
                         pieces.Add(mp);
                     }
 

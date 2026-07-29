@@ -273,6 +273,16 @@ public class VoyageSettings
         ItemFactory = () => new VoyageChartModifier(),
         ItemFilter = (o, s) => o.Id.Value.Contains(s, StringComparison.OrdinalIgnoreCase),
     };
+
+    [Menu(null, CollapsedByDefault = true)]
+    [JsonIgnore]
+    public ContentNode<BiomeWeightSetting> BiomeWeights { get; set; } = new ContentNode<BiomeWeightSetting>
+    {
+        EnableControls = true,
+        EnableItemCollapsing = true,
+        ItemFactory = () => new BiomeWeightSetting(),
+        ItemFilter = (o, s) => o.Id.Value.Contains(s, StringComparison.OrdinalIgnoreCase),
+    };
 }
 
 [Submenu(CollapsedByDefault = true)]
@@ -342,6 +352,18 @@ public class VoyageBorderModifier
     public override string ToString()
     {
         return $"{Id.Value} {ValueMultiplier.Value}###";
+    }
+}
+
+[Submenu(CollapsedByDefault = true)]
+public class BiomeWeightSetting
+{
+    public TextNode Id { get; set; } = new TextNode("");
+    public RangeNode<float> Weight { get; set; } = new RangeNode<float>(0, 0, 100);
+
+    public override string ToString()
+    {
+        return $"{Id.Value} {Weight.Value}###";
     }
 }
 

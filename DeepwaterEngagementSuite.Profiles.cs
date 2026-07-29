@@ -99,6 +99,12 @@ public partial class DeepwaterEngagementSuite
         vs.PositionWeights = entry.Profile.PositionWeights is { Length: 3 } pw
             ? pw.Select(r => r.ToArray()).ToArray()
             : VoyageSettings.DefaultPositionWeights();
+
+        vs.BiomeWeights.Content.Clear();
+        foreach (var bw in entry.Profile.BiomeWeights ?? [])
+        {
+            vs.BiomeWeights.Content.Add(bw);
+        }
     }
 
     private void OnProfileSelected(string name)
@@ -132,6 +138,13 @@ public partial class DeepwaterEngagementSuite
         }
 
         entry.Profile.PositionWeights = Settings.VoyageSettings.PositionWeights.Select(r => r.ToArray()).ToArray();
+
+        entry.Profile.BiomeWeights ??= [];
+        entry.Profile.BiomeWeights.Clear();
+        foreach (var bw in Settings.VoyageSettings.BiomeWeights.Content)
+        {
+            entry.Profile.BiomeWeights.Add(bw);
+        }
 
         var path = Path.Combine(_profilesDirectory, $"{name}.json");
         try
