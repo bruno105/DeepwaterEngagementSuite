@@ -18,8 +18,9 @@ public record MapPiece(
     Direction BaseConnections,
     List<Modifier> Modifiers)
 {
-    public readonly double GlobalModifier = Modifiers.Where(x => x.IsGlobal).Sum(x => x.Weight);
-    public readonly double LocalModifier = Modifiers.Where(x => !x.IsGlobal).Sum(x => x.Weight);
+    public readonly double GlobalModifier = Modifiers.Where(x => x.Scope == ModScope.Voyage).Sum(x => x.Weight);
+    public readonly double LocalModifier = Modifiers.Where(x => x.Scope == ModScope.Adjacent).Sum(x => x.Weight);
+    public readonly double OwnModifier = Modifiers.Where(x => x.Scope == ModScope.Self).Sum(x => x.Weight);
     public int DistinctRotations => Type switch
     {
         PieceType.Cross => 1,
