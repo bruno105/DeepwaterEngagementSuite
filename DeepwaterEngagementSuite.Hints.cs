@@ -15,7 +15,9 @@ public partial class DeepwaterEngagementSuite
 {
     // Chamas de lantern (Deepwater/Objects/Pointer) apontam recompensas via o
     // componente Pointer (nativo no ExileCore desde 2026-07-29: Targets).
-    // Cache via EntityAdded para não varrer a lista de entidades a cada frame.
+    // Renderização anti-poluição: a informação de lucro é ONDE o alvo está, então o
+    // padrão é 1 marcador por alvo NÃO revelado (dedup entre chamas). Linhas
+    // chama→alvo são opcionais e limitadas às chamas mais próximas do jogador.
     private readonly Dictionary<uint, Entity> _pointerEntities = new();
 
     private readonly record struct HintRow(string Label, uint EntityId, bool Active, Vector2 Start, Vector2 End);
@@ -38,6 +40,7 @@ public partial class DeepwaterEngagementSuite
 
         var debugRows = settings.ShowHintsDebugWindow.Value ? new List<HintRow>() : null;
 
+        var flames = new List<(Entity E, float Dist, List<Vector2> Targets, Vector2 GridDir)>();
         foreach (var e in _pointerEntities.Values.ToList())
         {
             if (e is not { IsValid: true })
@@ -45,73 +48,106 @@ public partial class DeepwaterEngagementSuite
                 continue;
             }
 
-            var startGrid = e.GridPosNum;
             var targets = ReadPointerTargets(e, out var gridDir);
+            flames.Add((e, Vector2.Distance(_playerGridPos, e.GridPosNum), targets, gridDir));
+        }
 
-            if (targets.Count == 0)
+        // 1) Marcadores dedupados: só alvos NÃO revelados (os revelados já têm ícone).
+        if (settings.ShowTargetMarkers)
+        {
+            var seenTargets = new HashSet<(int, int)>();
+            foreach (var (e, _, targets, _) in flames)
             {
-                // Fallback: sem componente legível, desenha raio pela rotação da entidade.
-                if (e.GetComponent<Positioned>() is not { } pos)
+                foreach (var target in targets)
                 {
-                    continue;
-                }
-
-                var (sin, cos) = MathF.SinCos(pos.Rotation);
-                var endGrid = startGrid + new Vector2(sin, -cos) * settings.RayLengthGridUnits.Value;
-                DrawHintLine(startGrid, endGrid, settings.RayColor, 2);
-                debugRows?.Add(new HintRow("(fallback ray)", e.Id, false, startGrid, endGrid));
-                continue;
-            }
-
-            // Alvo "ativo" = o mais alinhado com a direção selecionada do componente.
-            var activeIdx = -1;
-            if (gridDir != default)
-            {
-                var bestDot = -2f;
-                for (var i = 0; i < targets.Count; i++)
-                {
-                    var toTarget = targets[i] - startGrid;
-                    if (toTarget.LengthSquared() < 1e-3f)
+                    if (!seenTargets.Add(((int)(target.X / 20), (int)(target.Y / 20))))
                     {
                         continue;
                     }
 
-                    var dot = Vector2.Dot(Vector2.Normalize(toTarget), gridDir);
-                    if (dot > bestDot)
+                    var label = ResolveTargetLabel(target);
+                    debugRows?.Add(new HintRow(label ?? "Unrevealed", e.Id, false, e.GridPosNum, target));
+                    if (label != null)
                     {
-                        bestDot = dot;
-                        activeIdx = i;
+                        continue;
+                    }
+
+                    var text = $"? {Vector2.Distance(_playerGridPos, target):F0}";
+                    if (settings.ShowHintsInWorld)
+                    {
+                        var screen = GetWorldScreenPosition(target);
+                        if (IsRoughlyOnScreen(screen))
+                        {
+                            Graphics.DrawTextWithBackground(text, screen, settings.UnrevealedColor, Color.Black);
+                        }
+                    }
+
+                    if (settings.ShowHintsOnMap && _largeMapOpen)
+                    {
+                        Graphics.DrawTextWithBackground(text, Graphics.GridToMap(target, _playerGridPos),
+                            settings.UnrevealedColor, Color.Black);
                     }
                 }
             }
+        }
 
-            for (var i = 0; i < targets.Count; i++)
+        // 2) Linhas: opcionais, só das chamas mais próximas dentro do alcance.
+        if (settings.ShowRayLines)
+        {
+            var maxRange = settings.MaxPointerRangeGridUnits.Value;
+            foreach (var (e, dist, targets, gridDir) in flames
+                         .Where(f => maxRange == 0 || f.Dist <= maxRange)
+                         .OrderBy(f => f.Dist)
+                         .Take(settings.MaxRayFlames.Value))
             {
-                var target = targets[i];
-                var label = ResolveTargetLabel(target);
-                var resolved = label != null;
-                if (resolved && settings.HideResolvedRays)
+                var startGrid = e.GridPosNum;
+                if (targets.Count == 0)
                 {
-                    debugRows?.Add(new HintRow(label, e.Id, i == activeIdx, startGrid, target));
+                    // Fallback: componente ilegível, raio pela rotação da entidade.
+                    if (e.GetComponent<Positioned>() is not { } pos)
+                    {
+                        continue;
+                    }
+
+                    var (sin, cos) = MathF.SinCos(pos.Rotation);
+                    var endGrid = startGrid + new Vector2(sin, -cos) * settings.RayLengthGridUnits.Value;
+                    DrawHintLine(startGrid, endGrid, settings.RayColor, 2);
+                    debugRows?.Add(new HintRow("(fallback ray)", e.Id, false, startGrid, endGrid));
                     continue;
                 }
 
-                label ??= $"Unrevealed ({Vector2.Distance(_playerGridPos, target):F0})";
-                var color = resolved ? settings.RayColor.Value : settings.UnrevealedColor.Value;
-                var thickness = i == activeIdx ? 3 : 1;
-                DrawHintLine(startGrid, target, color, thickness);
-
-                if (settings.ShowHintsInWorld)
+                var activeIdx = -1;
+                if (gridDir != default)
                 {
-                    Graphics.DrawTextWithBackground(label, GetWorldScreenPosition(target), color, Color.Black);
+                    var bestDot = -2f;
+                    for (var i = 0; i < targets.Count; i++)
+                    {
+                        var toTarget = targets[i] - startGrid;
+                        if (toTarget.LengthSquared() < 1e-3f)
+                        {
+                            continue;
+                        }
+
+                        var dot = Vector2.Dot(Vector2.Normalize(toTarget), gridDir);
+                        if (dot > bestDot)
+                        {
+                            bestDot = dot;
+                            activeIdx = i;
+                        }
+                    }
                 }
 
-                if (settings.ShowHintsOnMap && _largeMapOpen)
+                for (var i = 0; i < targets.Count; i++)
                 {
-                    Graphics.DrawTextWithBackground(label, Graphics.GridToMap(target, _playerGridPos), color, Color.Black);
-                }
+                    var resolved = ResolveTargetLabel(targets[i]) != null;
+                    if (resolved && settings.HideResolvedRays)
+                    {
+                        continue;
+                    }
 
-                debugRows?.Add(new HintRow(label, e.Id, i == activeIdx, startGrid, target));
+                    var color = resolved ? settings.RayColor.Value : settings.UnrevealedColor.Value;
+                    DrawHintLine(startGrid, targets[i], color, i == activeIdx ? 3 : 1);
+                }
             }
         }
 
@@ -126,7 +162,12 @@ public partial class DeepwaterEngagementSuite
         var settings = Settings.HintSettings;
         if (settings.ShowHintsInWorld)
         {
-            Graphics.DrawLine(GetWorldScreenPosition(startGrid), GetWorldScreenPosition(endGrid), thickness, color);
+            var s = GetWorldScreenPosition(startGrid);
+            var t = GetWorldScreenPosition(endGrid);
+            if (IsRoughlyOnScreen(s) || IsRoughlyOnScreen(t))
+            {
+                Graphics.DrawLine(s, t, thickness, color);
+            }
         }
 
         if (settings.ShowHintsOnMap && _largeMapOpen)
@@ -134,6 +175,14 @@ public partial class DeepwaterEngagementSuite
             Graphics.DrawLine(Graphics.GridToMap(startGrid, _playerGridPos),
                 Graphics.GridToMap(endGrid, _playerGridPos), thickness, color);
         }
+    }
+
+    private bool IsRoughlyOnScreen(Vector2 screenPos)
+    {
+        var rect = GameController.Window.GetWindowRectangleTimeCache;
+        const float margin = 100f;
+        return screenPos.X > -margin && screenPos.Y > -margin &&
+               screenPos.X < rect.Width + margin && screenPos.Y < rect.Height + margin;
     }
 
     private List<Vector2> ReadPointerTargets(Entity e, out Vector2 gridDir)

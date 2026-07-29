@@ -160,6 +160,18 @@ public class HintSettings
     public ToggleNode ShowHintsInWorld { get; set; } = new ToggleNode(true);
     public ToggleNode ShowHintsOnMap { get; set; } = new ToggleNode(true);
 
+    [Menu("Show target markers", "Um marcador por alvo NAO revelado (dedup entre chamas) - o modo limpo")]
+    public ToggleNode ShowTargetMarkers { get; set; } = new ToggleNode(true);
+
+    [Menu("Show ray lines", "Linhas chama->alvo; limitadas as chamas mais proximas")]
+    public ToggleNode ShowRayLines { get; set; } = new ToggleNode(false);
+
+    [Menu("Max ray flames", "Numero maximo de chamas com linhas desenhadas")]
+    public RangeNode<int> MaxRayFlames { get; set; } = new RangeNode<int>(2, 1, 10);
+
+    [Menu("Max pointer range", "So desenha linhas de chamas a ate esta distancia do jogador (grid units); 0 = todas")]
+    public RangeNode<int> MaxPointerRangeGridUnits { get; set; } = new RangeNode<int>(250, 0, 1000);
+
     [Menu("Ray length (grid units)", "Comprimento do raio no fallback por rotacao, quando o componente Pointer nao esta legivel")]
     public RangeNode<int> RayLengthGridUnits { get; set; } = new RangeNode<int>(250, 50, 600);
 
