@@ -156,8 +156,6 @@ public partial class DeepwaterEngagementSuite : BaseSettingsPlugin<DeepwaterEnga
         _shapeCache.Clear();
         _rerollCount = 0;
         _lastBorderKey = null;
-        _baselineScore = null;
-        _baselineKey = null;
     }
 
     private ExpeditionEntityType GetEntityType(string path)

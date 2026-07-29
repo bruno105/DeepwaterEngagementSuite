@@ -12,6 +12,25 @@ public static class RerollAdvisor
 
     public static long NextCost(int rerollsDone) => BaseCost * (1L << rerollsDone);
 
+    /// <summary>
+    /// Razão entre a soma dos multiplicadores efetivos do board atual e a do board
+    /// baseline "médio". Não depende do solve — é a qualidade dos borders em si.
+    /// </summary>
+    public static double BorderRatio(double[,] effectiveMults, double[,] baselineMults)
+    {
+        double actual = 0, baseline = 0;
+        for (var r = 0; r < 3; r++)
+        {
+            for (var c = 0; c < 3; c++)
+            {
+                actual += effectiveMults[r, c];
+                baseline += baselineMults[r, c];
+            }
+        }
+
+        return baseline > 0 ? actual / baseline : 0;
+    }
+
     public static bool ShouldKeep(double ratio, double keepThreshold) => ratio >= keepThreshold;
 
     /// <summary>

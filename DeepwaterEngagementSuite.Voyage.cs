@@ -28,8 +28,6 @@ public partial class DeepwaterEngagementSuite
     private readonly System.Collections.Concurrent.ConcurrentQueue<string> _unknownBiomes = new();
     private int _rerollCount;
     private string _lastBorderKey;
-    private double? _baselineScore;
-    private string _baselineKey;
     private Task _run;
     private SyncTask<bool> _voyagePlaceTask;
     private VoyagePlanner _voyagePlanner;
@@ -257,6 +255,22 @@ public partial class DeepwaterEngagementSuite
         }
     }
 
+    /// <summary>Multiplicadores efetivos por célula do grid: P[r,c] × produto dos border mods do tile.</summary>
+    private double[,] ComputeEffectiveMultipliers(VoyageWindow tree)
+    {
+        var result = PositionWeightMap.ScreenToGrid(Settings.VoyageSettings.PositionWeights);
+        foreach (var (tileIndex, mods) in GetTileMods(tree))
+        {
+            var mult = mods
+                .Select(m => Settings.VoyageSettings.BorderModifiers.Content
+                    .FirstOrDefault(c => c.Id.Value == m.RawName)?.ValueMultiplier.Value ?? 1)
+                .Aggregate(1f, (a, b) => a * b);
+            result[tileIndex / 3, tileIndex % 3] *= mult;
+        }
+
+        return result;
+    }
+
     private static Dictionary<int, List<ItemMod>> GetTileMods(VoyageWindow tree)
     {
         var borderMods = tree.Data.BorderMods;
@@ -374,15 +388,7 @@ public partial class DeepwaterEngagementSuite
                         .ToList();
                 }
 
-                var modsPerTileIndex = GetTileMods(tree);
-                var boardMultipliers = modsPerTileIndex.Select(x => (x.Key,
-                    x.Value.Select(m => Settings.VoyageSettings.BorderModifiers.Content.FirstOrDefault(c => c.Id.Value == m.RawName)?.ValueMultiplier.Value ?? 1)
-                        .Aggregate(1f, (a, b) => a * b))).ToList();
-                var tileMultiplierArray = PositionWeightMap.ScreenToGrid(Settings.VoyageSettings.PositionWeights);
-                foreach (var boardMultiplier in boardMultipliers)
-                {
-                    tileMultiplierArray[boardMultiplier.Key / 3, boardMultiplier.Key % 3] *= boardMultiplier.Item2;
-                }
+                var tileMultiplierArray = ComputeEffectiveMultipliers(tree);
 
                 _voyagePlanner = new VoyagePlanner();
                 var timeLimitSetting = Settings.VoyageSettings.SolverTimeLimitSeconds.Value;
@@ -392,29 +398,6 @@ public partial class DeepwaterEngagementSuite
                     _result = r;
                     _voyageNodesExplored = r.NodesExplored;
                     _voyageNodesPruned = r.NodesPruned;
-                }
-
-                // Baseline p/ reroll advisor: mesmo pool de charts, borders "médios".
-                var piecesKey = string.Join("|", pieces.Select(p =>
-                    $"{p.Id}:{p.Type}:{(int)p.BaseConnections}:{p.OwnModifier:F2}:{p.LocalModifier:F2}:{p.GlobalModifier:F2}"));
-                var positionWeights = PositionWeightMap.ScreenToGrid(Settings.VoyageSettings.PositionWeights);
-                if (piecesKey != _baselineKey)
-                {
-                    var avg = Settings.VoyageSettings.BorderModifiers.Content
-                        .Select(b => (double)b.ValueMultiplier.Value)
-                        .DefaultIfEmpty(1)
-                        .Average();
-                    var baselineMults = RerollAdvisor.BuildBaselineMultipliers(avg, positionWeights, RerollAdvisor.BorderModCountPerTile);
-                    var baselinePlanner = new VoyagePlanner();
-                    double baselineScore = 0;
-                    foreach (var br in baselinePlanner.Solve(new VoyagePuzzle(pieces, baselineMults, []),
-                                 new VoyagePlannerSettings(TopN: 1, TimeLimitSeconds: timeLimitSetting)))
-                    {
-                        baselineScore = br.Solutions.FirstOrDefault()?.TotalScore ?? baselineScore;
-                    }
-
-                    _baselineScore = baselineScore;
-                    _baselineKey = piecesKey;
                 }
 
                 if (_voyageStopwatch.Elapsed.TotalSeconds >= timeLimitSetting)
@@ -457,16 +440,16 @@ public partial class DeepwaterEngagementSuite
 
         ImGui.Spacing();
 
-        if (_voyageSolving || _result != null)
+        if (Settings.VoyageSettings.ShowRerollAdvisor.Value && tree.Data.BorderMods.Count >= 12)
         {
-            ImGui.Text($"Nodes: {_voyageNodesExplored:N0} explored, {_voyageNodesPruned:N0} pruned");
-        }
-
-        if (Settings.VoyageSettings.ShowRerollAdvisor.Value &&
-            _result is { Solutions.Count: > 0 } &&
-            _baselineScore is > 0)
-        {
-            var ratio = _result.Solutions[0].TotalScore / _baselineScore.Value;
+            var effective = ComputeEffectiveMultipliers(tree);
+            var avg = Settings.VoyageSettings.BorderModifiers.Content
+                .Select(b => (double)b.ValueMultiplier.Value)
+                .DefaultIfEmpty(1)
+                .Average();
+            var positionWeights = PositionWeightMap.ScreenToGrid(Settings.VoyageSettings.PositionWeights);
+            var baseline = RerollAdvisor.BuildBaselineMultipliers(avg, positionWeights, RerollAdvisor.BorderModCountPerTile);
+            var ratio = RerollAdvisor.BorderRatio(effective, baseline);
             var keep = RerollAdvisor.ShouldKeep(ratio, Settings.VoyageSettings.RerollKeepThreshold.Value);
 
             int? sulphur = null;
@@ -508,6 +491,11 @@ public partial class DeepwaterEngagementSuite
             if (ImGui.SmallButton("-")) _rerollCount = Math.Max(0, _rerollCount - 1);
             ImGui.SameLine();
             if (ImGui.SmallButton("reset")) _rerollCount = 0;
+        }
+
+        if (_voyageSolving || _result != null)
+        {
+            ImGui.Text($"Nodes: {_voyageNodesExplored:N0} explored, {_voyageNodesPruned:N0} pruned");
         }
 
         if (_result == null || _result.Solutions.Count == 0)
