@@ -27,6 +27,7 @@ public class VoyagePlanner
     private Stopwatch _stopwatch;
     private VoyagePuzzle _puzzle;
     private double _maxModifierPerPiece;
+    private double _maxOwnPerPiece;
     private bool _cancelled;
     private int _filledCount;
 
@@ -54,9 +55,14 @@ public class VoyagePlanner
             .DefaultIfEmpty(0)
             .Max();
 
-        // Group pieces by (Type, BaseConnections, GlobalWeight, LocalWeight) — pieces in the
-        // same group are interchangeable for both connectivity and scoring.
-        var groupMap = new Dictionary<(PieceType, Direction, double, double), int>();
+        _maxOwnPerPiece = puzzle.AvailablePieces
+            .Select(p => p.OwnModifier)
+            .DefaultIfEmpty(0)
+            .Max();
+
+        // Group pieces by (Type, BaseConnections, GlobalWeight, LocalWeight, OwnWeight) — pieces
+        // in the same group are interchangeable for both connectivity and scoring.
+        var groupMap = new Dictionary<(PieceType, Direction, double, double, double), int>();
         var groups = new List<List<int>>();
         _pieceToGroup = new int[puzzle.AvailablePieces.Count];
 
@@ -65,7 +71,7 @@ public class VoyagePlanner
             var p = puzzle.AvailablePieces[i];
             var globalWeight = p.GlobalModifier;
             var localWeight = p.LocalModifier;
-            var key = (p.Type, p.BaseConnections, globalWeight, localWeight);
+            var key = (p.Type, p.BaseConnections, globalWeight, localWeight, p.OwnModifier);
             if (!groupMap.TryGetValue(key, out var g))
             {
                 g = groups.Count;
@@ -438,7 +444,7 @@ public class VoyagePlanner
         {
             for (var c = 0; c < GridSize; c++)
             {
-                var cellScore = globalSum;
+                var cellScore = globalSum + _grid[r, c].Piece.OwnModifier;
 
                 foreach (var (_, dr, dc) in Directions)
                 {
@@ -485,7 +491,7 @@ public class VoyagePlanner
             {
                 if (_grid[i, j] != null)
                 {
-                    var cellScore = 0.0;
+                    var cellScore = _grid[i, j].Piece.OwnModifier;
                     foreach (var (_, dr, dc) in Directions)
                     {
                         var nr = i + dr;
@@ -508,7 +514,7 @@ public class VoyagePlanner
                         if (nr >= 0 && nr < GridSize && nc >= 0 && nc < GridSize)
                             neighborCount++;
                     }
-                    score += (neighborCount * _maxModifierPerPiece + ubGlobalSum) * _puzzle.LocationModifiers[i, j];
+                    score += (neighborCount * _maxModifierPerPiece + _maxOwnPerPiece + ubGlobalSum) * _puzzle.LocationModifiers[i, j];
                     emptyCount++;
                 }
             }
