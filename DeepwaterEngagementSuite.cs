@@ -143,6 +143,8 @@ public partial class DeepwaterEngagementSuite : BaseSettingsPlugin<DeepwaterEnga
 
     public override void AreaChange(AreaInstance area)
     {
+        FinalizeZoneStats();
+        _pointerEntities.Clear();
         _plannerRunner?.Stop();
         _plannerRunner = null;
         _scoreHistory = [];
@@ -251,6 +253,8 @@ public partial class DeepwaterEngagementSuite : BaseSettingsPlugin<DeepwaterEnga
             return null;
         }
 
+        ZoneStatsTick();
+
         Settings.PlannerSettings.SearchState = _plannerRunner switch
         {
             { IsRunning: true } => SearchState.Searching,
@@ -339,6 +343,11 @@ public partial class DeepwaterEngagementSuite : BaseSettingsPlugin<DeepwaterEnga
         if (Handler == null)
         {
             return;
+        }
+
+        if (!largePanelsOpen)
+        {
+            DrawPointerHints();
         }
 
         if (!largePanelsOpen && (Settings.BubbleSettings.ShowBubblesOnMap ||
@@ -823,17 +832,21 @@ public partial class DeepwaterEngagementSuite : BaseSettingsPlugin<DeepwaterEnga
 
     public override void EntityAdded(Entity entity)
     {
+        TrackPointerEntity(entity);
+        ZoneStatsOnMonsterAdded(entity);
         if ((entity.Type is EntityType.Chest or EntityType.Terrain or EntityType.IngameIcon)
             && GetEntityType(entity.Path) != ExpeditionEntityType.None
             && !entity.IsOpened)
         {
             _cachedEntities[entity.Id] = BuildCacheItem(entity);
+            ZoneStatsOnMarkerAdded(entity);
         }
     }
 
     public override void EntityRemoved(Entity entity)
     {
         _cachedEntities.Remove(entity.Id);
+        _pointerEntities.Remove(entity.Id);
     }
 
     private static EntityCacheItem BuildCacheItem(Entity entity)

@@ -49,6 +49,11 @@ public class DeepwaterEngagementSuiteSettings : ISettings
 
     public BubbleSettings BubbleSettings { get; set; } = new BubbleSettings();
 
+    public HintSettings HintSettings { get; set; } = new HintSettings();
+
+    [Menu("Collect zone stats", "Grava monstros/chests/sulphur por zona deepwater em config/DeepwaterEngagementSuite/zone_stats.jsonl")]
+    public ToggleNode CollectZoneStats { get; set; } = new ToggleNode(true);
+
     [Menu("Bubble planner settings")]
     public PlannerSettings PlannerSettings { get; set; } = new PlannerSettings();
     public VoyageSettings VoyageSettings { get; set; } = new VoyageSettings();
@@ -149,6 +154,22 @@ public class PlannerSettings
 }
 
 [Submenu(CollapsedByDefault = true)]
+public class HintSettings
+{
+    public ToggleNode ShowPointerHints { get; set; } = new ToggleNode(true);
+    public ToggleNode ShowHintsInWorld { get; set; } = new ToggleNode(true);
+    public ToggleNode ShowHintsOnMap { get; set; } = new ToggleNode(true);
+
+    [Menu("Ray length (grid units)", "Comprimento do raio quando a entidade nao tem componente Beam")]
+    public RangeNode<int> RayLengthGridUnits { get; set; } = new RangeNode<int>(250, 50, 600);
+
+    [Menu("Hide resolved rays", "Esconde raios que passam perto de um bau/evento ja conhecido")]
+    public ToggleNode HideResolvedRays { get; set; } = new ToggleNode(true);
+
+    public ColorNode RayColor { get; set; } = new ColorNode(Color.Gold);
+}
+
+[Submenu(CollapsedByDefault = true)]
 public class BubbleSettings
 {
     public ToggleNode ShowBubblesOnMap { get; set; } = new ToggleNode(true);
@@ -234,6 +255,12 @@ public class VoyageSettings
     public RangeNode<float> ChartHighlightThreshold { get; set; } = new RangeNode<float>(1.0f, 0, 10);
 
     public ToggleNode ShowRerollAdvisor { get; set; } = new ToggleNode(true);
+
+    [Menu("Show tile priority", "Numera os tiles do board por multiplicador efetivo (onde investir allflames/rota)")]
+    public ToggleNode ShowTilePriority { get; set; } = new ToggleNode(true);
+
+    [Menu("Show chart values", "Mostra o valor calculado de cada chart do estoque e marca os que entram no solve")]
+    public ToggleNode ShowChartValues { get; set; } = new ToggleNode(true);
 
     [Menu("Reroll keep threshold", "R = melhor score atual / score com borders medios. Abaixo disso o advisor recomenda reroll.")]
     public RangeNode<float> RerollKeepThreshold { get; set; } = new RangeNode<float>(1.0f, 0f, 3f);

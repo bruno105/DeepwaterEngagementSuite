@@ -26,6 +26,7 @@ public partial class DeepwaterEngagementSuite
 {
     private VoyageSolutionResult _result;
     private readonly System.Collections.Concurrent.ConcurrentQueue<string> _unknownBiomes = new();
+    private readonly Dictionary<long, (MapPiece Piece, int ExplicitCount)> _chartValueCache = new();
     private int _rerollCount;
     private string _lastBorderKey;
     private Task _run;
@@ -155,6 +156,11 @@ public partial class DeepwaterEngagementSuite
         if (tree is not { IsValid: true, IsVisible: true })
         {
             _voyagePlaceTask = null;
+            if (_chartValueCache.Count > 0)
+            {
+                _chartValueCache.Clear();
+            }
+
             return;
         }
 
@@ -185,6 +191,18 @@ public partial class DeepwaterEngagementSuite
             _lastBorderKey = borderKey;
         }
 
+        double[,] effectiveMults = null;
+        var tileRanks = new int[9];
+        if (Settings.VoyageSettings.ShowTilePriority.Value && tree.Data.BorderMods.Count >= 12)
+        {
+            effectiveMults = ComputeEffectiveMultipliers(tree);
+            var order = Enumerable.Range(0, 9).OrderByDescending(t => effectiveMults[t / 3, t % 3]).ToList();
+            for (var rank = 0; rank < order.Count; rank++)
+            {
+                tileRanks[order[rank]] = rank + 1;
+            }
+        }
+
         var tiles = tree.Tiles;
         for (var index = 0; index < tiles.Count; index++)
         {
@@ -192,6 +210,13 @@ public partial class DeepwaterEngagementSuite
             var mods = modsPerTileIndex.GetValueOrDefault(index) ?? [];
             var tileTopLeft = tile.GetClientRectCache.TopLeft.ToVector2Num();
             Graphics.DrawTextWithBackground($"({index / 3}, {index % 3})", tileTopLeft, Color.Black);
+            if (effectiveMults != null && index < 9)
+            {
+                var rank = tileRanks[index];
+                var rankColor = rank <= 3 ? Color.LightGreen : rank >= 8 ? Color.OrangeRed : Color.White;
+                Graphics.DrawTextWithBackground($"prio {rank} (x{effectiveMults[index / 3, index % 3]:F2})",
+                    tileTopLeft + new Vector2(0, 16), rankColor, Color.Black);
+            }
             var tileCenter = tile.GetClientRectCache.Center.ToVector2Num();
             // Chart name above center
             var chart = tile.ItemContainer?.Entity?.GetComponent<DeepwaterChart>();
@@ -244,15 +269,106 @@ public partial class DeepwaterEngagementSuite
         }
 
         var charts = GetAvailableCharts();
+        var chartEntries = new (MapPiece Piece, int ExplicitCount)[charts.Count];
+        if (Settings.VoyageSettings.ShowChartValues.Value)
+        {
+            for (int i = 0; i < charts.Count; i++)
+            {
+                var addr = charts[i].Address;
+                if (!_chartValueCache.TryGetValue(addr, out var entry))
+                {
+                    entry = (BuildMapPiece(charts[i], i),
+                        charts[i].Item.GetComponent<Mods>()?.ExplicitMods?.Count ?? 0);
+                    _chartValueCache[addr] = entry;
+                }
+
+                chartEntries[i] = entry;
+            }
+        }
+
+        var maxSolveCharts = Settings.VoyageSettings.SolverMaxCharts.Value;
+        var topChartSet = Settings.VoyageSettings.ShowChartValues.Value
+            ? Enumerable.Range(0, charts.Count)
+                .Where(i => chartEntries[i].Piece != null)
+                .OrderByDescending(i => chartEntries[i].Piece.OwnModifier + chartEntries[i].Piece.LocalModifier + chartEntries[i].Piece.GlobalModifier)
+                .Take(maxSolveCharts > 0 ? maxSolveCharts : charts.Count)
+                .ToHashSet()
+            : [];
+
         for (int i = 0; i < charts.Count; i++)
         {
-            Graphics.DrawTextWithBackground($"#{i}", charts[i].GetClientRectCache.TopLeft.ToVector2Num(), Color.Black);
+            var chartTopLeft = charts[i].GetClientRectCache.TopLeft.ToVector2Num();
+            Graphics.DrawTextWithBackground($"#{i}", chartTopLeft, Color.Black);
+            if (!Settings.VoyageSettings.ShowChartValues.Value || chartEntries[i].Piece is not { } piece)
+            {
+                continue;
+            }
+
+            var value = piece.OwnModifier + piece.LocalModifier + piece.GlobalModifier;
+            var inTop = topChartSet.Contains(i);
+            Graphics.DrawTextWithBackground($"{value:F0}", chartTopLeft + new Vector2(0, 12),
+                inTop ? Color.LightGreen : Color.Gray, Color.Black);
+            if (inTop && chartEntries[i].ExplicitCount == 0)
+            {
+                Graphics.DrawTextWithBackground("craft", chartTopLeft + new Vector2(0, 24), Color.Yellow, Color.Black);
+            }
         }
 
         if (settings.ShowOptimizerWindow.Value)
         {
             ShowVoyageOptimizerWindow(tree,tiles);
         }
+    }
+
+    /// <summary>Constrói a peça do solver a partir de um chart do estoque (mods + bioma). Null se inválido.</summary>
+    private MapPiece BuildMapPiece(NormalInventoryItem chart, int index)
+    {
+        if (!chart.Item.TryGetComponent(out DeepwaterChart c) || c.Room == null)
+        {
+            return null;
+        }
+
+        var rotation = ((Direction)c.Room.Path);
+        var itemMods = chart.Item.GetComponent<Mods>();
+        var modifiers = new List<Modifier> { new("Default", 1) };
+
+        void AddItemMods(IEnumerable<ItemMod> source, ModScope defaultScope)
+        {
+            foreach (var im in source ?? [])
+            {
+                var chartMod = Settings.VoyageSettings.ChartModifiers.Content
+                    .FirstOrDefault(cm => cm.Id.Value.Equals(im.RawName, StringComparison.OrdinalIgnoreCase));
+                modifiers.Add(new Modifier(im.RawName, chartMod?.Weight.Value ?? 0,
+                    chartMod?.EffectiveScope ?? defaultScope));
+            }
+        }
+
+        AddItemMods(itemMods?.ImplicitMods, ModScope.Adjacent);
+        AddItemMods(itemMods?.ExplicitMods, ModScope.Self);
+
+        var biomeId = c.Room?.Biome?.Id;
+        if (!string.IsNullOrEmpty(biomeId))
+        {
+            var biome = Settings.VoyageSettings.BiomeWeights.Content
+                .FirstOrDefault(b => b.Id.Value.Equals(biomeId, StringComparison.OrdinalIgnoreCase));
+            if (biome == null)
+            {
+                _unknownBiomes.Enqueue(biomeId);
+            }
+
+            modifiers.Add(new Modifier($"Biome:{biomeId}", biome?.Weight.Value ?? 0, ModScope.Self));
+        }
+
+        return new MapPiece(index,
+            int.PopCount((int)rotation) switch
+            {
+                4 => PieceType.Cross,
+                3 => PieceType.Tee,
+                1 => PieceType.Single,
+                2 => rotation.HasFlag(Direction.Left) == rotation.HasFlag(Direction.Right)
+                    ? PieceType.Straight
+                    : PieceType.Corner
+            }, rotation, modifiers);
     }
 
     /// <summary>Multiplicadores efetivos por célula do grid: P[r,c] × produto dos border mods do tile.</summary>
@@ -323,49 +439,8 @@ public partial class DeepwaterEngagementSuite
                 var pieces = new List<MapPiece>();
                 foreach (var chart in GetAvailableCharts())
                 {
-                    if (chart.Item.TryGetComponent(out DeepwaterChart c))
+                    if (BuildMapPiece(chart, i) is { } mp)
                     {
-                        var rotation = ((Direction)c.Room.Path);
-                        var itemMods = chart.Item.GetComponent<Mods>();
-                        var modifiers = new List<Modifier> { new("Default", 1) };
-
-                        void AddItemMods(IEnumerable<ItemMod> source, ModScope defaultScope)
-                        {
-                            foreach (var im in source ?? [])
-                            {
-                                var chartMod = Settings.VoyageSettings.ChartModifiers.Content
-                                    .FirstOrDefault(cm => cm.Id.Value.Equals(im.RawName, StringComparison.OrdinalIgnoreCase));
-                                modifiers.Add(new Modifier(im.RawName, chartMod?.Weight.Value ?? 0,
-                                    chartMod?.EffectiveScope ?? defaultScope));
-                            }
-                        }
-
-                        AddItemMods(itemMods?.ImplicitMods, ModScope.Adjacent);
-                        AddItemMods(itemMods?.ExplicitMods, ModScope.Self);
-
-                        var biomeId = c.Room?.Biome?.Id;
-                        if (!string.IsNullOrEmpty(biomeId))
-                        {
-                            var biome = Settings.VoyageSettings.BiomeWeights.Content
-                                .FirstOrDefault(b => b.Id.Value.Equals(biomeId, StringComparison.OrdinalIgnoreCase));
-                            if (biome == null)
-                            {
-                                _unknownBiomes.Enqueue(biomeId);
-                            }
-
-                            modifiers.Add(new Modifier($"Biome:{biomeId}", biome?.Weight.Value ?? 0, ModScope.Self));
-                        }
-
-                        var mp = new MapPiece(i,
-                            int.PopCount((int)rotation) switch
-                            {
-                                4 => PieceType.Cross,
-                                3 => PieceType.Tee,
-                                1 => PieceType.Single,
-                                2 => rotation.HasFlag(Direction.Left) == rotation.HasFlag(Direction.Right)
-                                    ? PieceType.Straight
-                                    : PieceType.Corner
-                            }, rotation, modifiers);
                         pieces.Add(mp);
                     }
 
