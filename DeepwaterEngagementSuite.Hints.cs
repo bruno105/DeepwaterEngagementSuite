@@ -4,16 +4,24 @@ using System.Linq;
 using ExileCore.PoEMemory.Components;
 using ExileCore.PoEMemory.MemoryObjects;
 using ExileCore.Shared.Helpers;
+using GameOffsets.Native;
+using ImGuiNET;
+using SharpDX;
 using Vector2 = System.Numerics.Vector2;
 
 namespace DeepwaterEngagementSuite;
 
 public partial class DeepwaterEngagementSuite
 {
-    // Chamas de lantern (Deepwater/Objects/Pointer) apontam na direção de recompensas
-    // escondidas — mesma lógica do hint de Ritual. Cache via EntityAdded para não
-    // varrer a lista de entidades a cada frame.
+    // Chamas de lantern (Deepwater/Objects/Pointer) carregam um componente "Pointer"
+    // não mapeado no ExileCore (layout mapeado pela comunidade):
+    //   +0x28 std::vector<Vector2i>  — posições de grid dos alvos apontados
+    //   +0x58 Vector2                — direção normalizada do alvo selecionado,
+    //                                  rotacionada 90° do grid (gridDir = (Y, -X))
+    // Cache via EntityAdded para não varrer a lista de entidades a cada frame.
     private readonly Dictionary<uint, Entity> _pointerEntities = new();
+
+    private readonly record struct HintRow(string Label, uint EntityId, bool Active, Vector2 Start, Vector2 End);
 
     private void TrackPointerEntity(Entity entity)
     {
@@ -31,6 +39,8 @@ public partial class DeepwaterEngagementSuite
             return;
         }
 
+        var debugRows = settings.ShowHintsDebugWindow.Value ? new List<HintRow>() : null;
+
         foreach (var e in _pointerEntities.Values.ToList())
         {
             if (e is not { IsValid: true })
@@ -39,65 +49,179 @@ public partial class DeepwaterEngagementSuite
             }
 
             var startGrid = e.GridPosNum;
-            Vector2 endGrid;
-            if (e.TryGetComponent<Beam>(out var beam) && beam != null)
+            var targets = ReadPointerTargets(e, out var gridDir);
+
+            if (targets.Count == 0)
             {
-                endGrid = beam.BeamEndNum.WorldToGrid();
-            }
-            else if (e.GetComponent<Positioned>() is { } pos)
-            {
+                // Fallback: sem componente legível, desenha raio pela rotação da entidade.
+                if (e.GetComponent<Positioned>() is not { } pos)
+                {
+                    continue;
+                }
+
                 var (sin, cos) = MathF.SinCos(pos.Rotation);
-                var dir = new Vector2(sin, -cos);
-                endGrid = startGrid + dir * settings.RayLengthGridUnits.Value;
-            }
-            else
-            {
+                var endGrid = startGrid + new Vector2(sin, -cos) * settings.RayLengthGridUnits.Value;
+                DrawHintLine(startGrid, endGrid, settings.RayColor, 2);
+                debugRows?.Add(new HintRow("(fallback ray)", e.Id, false, startGrid, endGrid));
                 continue;
             }
 
-            if (settings.HideResolvedRays && RayResolvesToKnownEntity(startGrid, endGrid))
+            // Alvo "ativo" = o mais alinhado com a direção selecionada do componente.
+            var activeIdx = -1;
+            if (gridDir != default)
             {
-                continue;
+                var bestDot = -2f;
+                for (var i = 0; i < targets.Count; i++)
+                {
+                    var toTarget = targets[i] - startGrid;
+                    if (toTarget.LengthSquared() < 1e-3f)
+                    {
+                        continue;
+                    }
+
+                    var dot = Vector2.Dot(Vector2.Normalize(toTarget), gridDir);
+                    if (dot > bestDot)
+                    {
+                        bestDot = dot;
+                        activeIdx = i;
+                    }
+                }
             }
 
-            if (settings.ShowHintsInWorld)
+            for (var i = 0; i < targets.Count; i++)
             {
-                Graphics.DrawLine(GetWorldScreenPosition(startGrid), GetWorldScreenPosition(endGrid), 2,
-                    settings.RayColor);
-            }
+                var target = targets[i];
+                var label = ResolveTargetLabel(target);
+                var resolved = label != null;
+                if (resolved && settings.HideResolvedRays)
+                {
+                    debugRows?.Add(new HintRow(label, e.Id, i == activeIdx, startGrid, target));
+                    continue;
+                }
 
-            if (settings.ShowHintsOnMap && _largeMapOpen)
-            {
-                Graphics.DrawLine(Graphics.GridToMap(startGrid, _playerGridPos),
-                    Graphics.GridToMap(endGrid, _playerGridPos), 1, settings.RayColor);
+                label ??= $"Unrevealed ({Vector2.Distance(_playerGridPos, target):F0})";
+                var color = resolved ? settings.RayColor.Value : settings.UnrevealedColor.Value;
+                var thickness = i == activeIdx ? 3 : 1;
+                DrawHintLine(startGrid, target, color, thickness);
+
+                if (settings.ShowHintsInWorld)
+                {
+                    Graphics.DrawTextWithBackground(label, GetWorldScreenPosition(target), color, Color.Black);
+                }
+
+                if (settings.ShowHintsOnMap && _largeMapOpen)
+                {
+                    Graphics.DrawTextWithBackground(label, Graphics.GridToMap(target, _playerGridPos), color, Color.Black);
+                }
+
+                debugRows?.Add(new HintRow(label, e.Id, i == activeIdx, startGrid, target));
             }
+        }
+
+        if (debugRows != null)
+        {
+            DrawHintsDebugWindow(debugRows);
         }
     }
 
-    private bool RayResolvesToKnownEntity(Vector2 rayStart, Vector2 rayEnd)
+    private void DrawHintLine(Vector2 startGrid, Vector2 endGrid, Color color, int thickness)
     {
-        const float toleranceGridUnits = 30f;
+        var settings = Settings.HintSettings;
+        if (settings.ShowHintsInWorld)
+        {
+            Graphics.DrawLine(GetWorldScreenPosition(startGrid), GetWorldScreenPosition(endGrid), thickness, color);
+        }
+
+        if (settings.ShowHintsOnMap && _largeMapOpen)
+        {
+            Graphics.DrawLine(Graphics.GridToMap(startGrid, _playerGridPos),
+                Graphics.GridToMap(endGrid, _playerGridPos), thickness, color);
+        }
+    }
+
+    private List<Vector2> ReadPointerTargets(Entity e, out Vector2 gridDir)
+    {
+        gridDir = default;
+        try
+        {
+            if (e.CacheComp == null || !e.CacheComp.TryGetValue("Pointer", out var addr) || addr == 0)
+            {
+                return [];
+            }
+
+            var vec = e.M.Read<StdVector>(addr + 0x28);
+            var targets = e.M.ReadStdVector<Vector2i>(vec);
+            if (targets is not { Length: > 0 and <= 32 })
+            {
+                return [];
+            }
+
+            var raw = e.M.Read<Vector2>(addr + 0x58);
+            // Direção vem rotacionada 90° do espaço de grid: gridDir = (Y, -X).
+            gridDir = new Vector2(raw.Y, -raw.X);
+            if (gridDir != default)
+            {
+                gridDir = Vector2.Normalize(gridDir);
+            }
+
+            return targets.Select(t => new Vector2(t.X, t.Y)).ToList();
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    /// <summary>Nome do baú/evento conhecido perto do alvo, ou null se ainda não revelado.</summary>
+    private string ResolveTargetLabel(Vector2 targetGrid)
+    {
+        const float toleranceGridUnits = 20f;
         foreach (var cached in _cachedEntities.Values)
         {
-            if (DistancePointToSegment(cached.GridPos, rayStart, rayEnd) < toleranceGridUnits)
+            if (Vector2.Distance(cached.GridPos, targetGrid) < toleranceGridUnits)
             {
-                return true;
+                return GetChestType(cached.Path).ToString();
             }
         }
 
-        return false;
+        return null;
     }
 
-    private static float DistancePointToSegment(Vector2 point, Vector2 a, Vector2 b)
+    private void DrawHintsDebugWindow(List<HintRow> rows)
     {
-        var ab = b - a;
-        var lengthSq = ab.LengthSquared();
-        if (lengthSq < 1e-6f)
+        if (!ImGui.Begin("Deepwater hints debug"))
         {
-            return Vector2.Distance(point, a);
+            ImGui.End();
+            return;
         }
 
-        var t = Math.Clamp(Vector2.Dot(point - a, ab) / lengthSq, 0f, 1f);
-        return Vector2.Distance(point, a + ab * t);
+        ImGui.Text($"Rays: {rows.Count}");
+        if (ImGui.BeginTable("HintRows", 5, ImGuiTableFlags.Borders | ImGuiTableFlags.SizingStretchProp))
+        {
+            ImGui.TableSetupColumn("Target");
+            ImGui.TableSetupColumn("Id");
+            ImGui.TableSetupColumn("Active");
+            ImGui.TableSetupColumn("Start");
+            ImGui.TableSetupColumn("End");
+            ImGui.TableHeadersRow();
+            foreach (var row in rows)
+            {
+                ImGui.TableNextRow();
+                ImGui.TableNextColumn();
+                ImGui.Text(row.Label);
+                ImGui.TableNextColumn();
+                ImGui.Text($"{row.EntityId}");
+                ImGui.TableNextColumn();
+                ImGui.Text(row.Active ? "yes" : "");
+                ImGui.TableNextColumn();
+                ImGui.Text($"{row.Start.X:F0},{row.Start.Y:F0}");
+                ImGui.TableNextColumn();
+                ImGui.Text($"{row.End.X:F0},{row.End.Y:F0}");
+            }
+
+            ImGui.EndTable();
+        }
+
+        ImGui.End();
     }
 }

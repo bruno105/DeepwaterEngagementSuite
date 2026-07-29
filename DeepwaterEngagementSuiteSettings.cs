@@ -160,13 +160,19 @@ public class HintSettings
     public ToggleNode ShowHintsInWorld { get; set; } = new ToggleNode(true);
     public ToggleNode ShowHintsOnMap { get; set; } = new ToggleNode(true);
 
-    [Menu("Ray length (grid units)", "Comprimento do raio quando a entidade nao tem componente Beam")]
+    [Menu("Ray length (grid units)", "Comprimento do raio no fallback por rotacao, quando o componente Pointer nao esta legivel")]
     public RangeNode<int> RayLengthGridUnits { get; set; } = new RangeNode<int>(250, 50, 600);
 
-    [Menu("Hide resolved rays", "Esconde raios que passam perto de um bau/evento ja conhecido")]
-    public ToggleNode HideResolvedRays { get; set; } = new ToggleNode(true);
+    [Menu("Hide resolved rays", "Esconde linhas para alvos que ja resolvem para um bau/evento conhecido")]
+    public ToggleNode HideResolvedRays { get; set; } = new ToggleNode(false);
 
     public ColorNode RayColor { get; set; } = new ColorNode(Color.Gold);
+
+    [Menu("Unrevealed color", "Cor das linhas para alvos ainda nao revelados")]
+    public ColorNode UnrevealedColor { get; set; } = new ColorNode(Color.White);
+
+    [Menu("Show debug window", "Tabela com os alvos lidos do componente Pointer")]
+    public ToggleNode ShowHintsDebugWindow { get; set; } = new ToggleNode(false);
 }
 
 [Submenu(CollapsedByDefault = true)]
