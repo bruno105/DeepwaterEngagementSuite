@@ -22,6 +22,8 @@ public partial class DeepwaterEngagementSuite
     private readonly HashSet<uint> _statsSeenChests = new();
     private readonly Dictionary<MonsterRarity, int> _statsMonsters = new();
     private readonly Dictionary<string, int> _statsChests = new();
+    private Dictionary<string, int> _statsRewards = new();
+    private DateTime _statsLastRewardScan = DateTime.MinValue;
 
     private void ZoneStatsOnMonsterAdded(Entity entity)
     {
@@ -57,6 +59,16 @@ public partial class DeepwaterEngagementSuite
             return;
         }
 
+        // Init preguiçoso: cobre o primeiro load/reload no meio de uma zona, quando
+        // AreaChange (que normalmente inicializa a identidade da zona) não disparou.
+        if (string.IsNullOrEmpty(_statsAreaName))
+        {
+            var area = GameController.IngameState.Data.CurrentArea;
+            _statsAreaName = area?.Name;
+            _statsAreaLevel = area?.AreaLevel ?? 0;
+            _statsAreaStart = DateTime.UtcNow;
+        }
+
         try
         {
             var sulphur = Handler?.Sulphur;
@@ -70,14 +82,61 @@ public partial class DeepwaterEngagementSuite
         {
             // handler ilegível fora de contexto deepwater
         }
+
+        ZoneStatsScanRewards();
+    }
+
+    private void ZoneStatsScanRewards()
+    {
+        if ((DateTime.UtcNow - _statsLastRewardScan).TotalMilliseconds < 500)
+        {
+            return;
+        }
+
+        _statsLastRewardScan = DateTime.UtcNow;
+        try
+        {
+            if (GameController.IngameState.IngameUi.VoyageRewardWindow is not { IsValid: true, IsVisible: true } rewardWindow)
+            {
+                return;
+            }
+
+            var snapshot = new Dictionary<string, int>();
+            foreach (var tab in rewardWindow.ItemContainer?.Inventories ?? [])
+            {
+                foreach (var invItem in tab.Inventory?.VisibleInventoryItems ?? [])
+                {
+                    var entity = invItem.Item;
+                    if (entity == null)
+                    {
+                        continue;
+                    }
+
+                    var name = GameController.Files.BaseItemTypes.Translate(entity.Path)?.BaseName ?? entity.Path;
+                    var stack = entity.GetComponent<ExileCore.PoEMemory.Components.Stack>()?.Size ?? 1;
+                    snapshot[name] = snapshot.GetValueOrDefault(name) + stack;
+                }
+            }
+
+            // Última foto da janela vence — é o conteúdo real enviado à superfície.
+            if (snapshot.Count > 0)
+            {
+                _statsRewards = snapshot;
+            }
+        }
+        catch
+        {
+            // janela em transição; tenta no próximo scan
+        }
     }
 
     private void FinalizeZoneStats()
     {
         try
         {
-            // Só grava zonas onde apareceu conteúdo deepwater (marker de chest/evento).
-            if (Settings.CollectZoneStats && _statsChests.Count > 0 && !string.IsNullOrEmpty(_statsAreaName))
+            // Só grava zonas onde apareceu conteúdo deepwater (marker ou rewards).
+            if (Settings.CollectZoneStats && (_statsChests.Count > 0 || _statsRewards.Count > 0) &&
+                !string.IsNullOrEmpty(_statsAreaName))
             {
                 var sb = new StringBuilder(512);
                 sb.Append('{');
@@ -91,6 +150,8 @@ public partial class DeepwaterEngagementSuite
                 sb.Append(string.Join(",", _statsMonsters.Select(kv => $"\"{kv.Key}\":{kv.Value}")));
                 sb.Append("},\"chests\":{");
                 sb.Append(string.Join(",", _statsChests.Select(kv => $"\"{kv.Key}\":{kv.Value}")));
+                sb.Append("},\"rewards\":{");
+                sb.Append(string.Join(",", _statsRewards.Select(kv => $"\"{kv.Key.Replace("\"", "")}\":{kv.Value}")));
                 sb.Append("}}");
                 File.AppendAllText(Path.Combine(ConfigDirectory, "zone_stats.jsonl"), sb + Environment.NewLine);
             }
@@ -104,6 +165,7 @@ public partial class DeepwaterEngagementSuite
         _statsSeenChests.Clear();
         _statsMonsters.Clear();
         _statsChests.Clear();
+        _statsRewards = new Dictionary<string, int>();
         _statsSulphurStart = null;
         _statsSulphurLast = null;
         var area = GameController.IngameState.Data.CurrentArea;

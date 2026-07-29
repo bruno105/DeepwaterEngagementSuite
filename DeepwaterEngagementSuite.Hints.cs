@@ -13,11 +13,8 @@ namespace DeepwaterEngagementSuite;
 
 public partial class DeepwaterEngagementSuite
 {
-    // Chamas de lantern (Deepwater/Objects/Pointer) carregam um componente "Pointer"
-    // não mapeado no ExileCore (layout mapeado pela comunidade):
-    //   +0x28 std::vector<Vector2i>  — posições de grid dos alvos apontados
-    //   +0x58 Vector2                — direção normalizada do alvo selecionado,
-    //                                  rotacionada 90° do grid (gridDir = (Y, -X))
+    // Chamas de lantern (Deepwater/Objects/Pointer) apontam recompensas via o
+    // componente Pointer (nativo no ExileCore desde 2026-07-29: Targets).
     // Cache via EntityAdded para não varrer a lista de entidades a cada frame.
     private readonly Dictionary<uint, Entity> _pointerEntities = new();
 
@@ -144,20 +141,21 @@ public partial class DeepwaterEngagementSuite
         gridDir = default;
         try
         {
-            if (e.CacheComp == null || !e.CacheComp.TryGetValue("Pointer", out var addr) || addr == 0)
+            var pointer = e.GetComponent<Pointer>();
+            if (pointer == null || pointer.Address == 0)
             {
                 return [];
             }
 
-            var vec = e.M.Read<StdVector>(addr + 0x28);
-            var targets = e.M.ReadStdVector<Vector2i>(vec);
-            if (targets is not { Length: > 0 and <= 32 })
+            var targets = pointer.Targets;
+            if (targets is not { Count: > 0 and <= 32 })
             {
                 return [];
             }
 
-            var raw = e.M.Read<Vector2>(addr + 0x58);
-            // Direção vem rotacionada 90° do espaço de grid: gridDir = (Y, -X).
+            // A direção do alvo selecionado ainda não é exposta pelo componente nativo:
+            // raw em +0x58, rotacionada 90° do espaço de grid (gridDir = (Y, -X)).
+            var raw = e.M.Read<Vector2>(pointer.Address + 0x58);
             gridDir = new Vector2(raw.Y, -raw.X);
             if (gridDir != default)
             {
