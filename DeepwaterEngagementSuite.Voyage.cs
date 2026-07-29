@@ -452,10 +452,6 @@ public partial class DeepwaterEngagementSuite
         {
             var ratio = _result.Solutions[0].TotalScore / _baselineScore.Value;
             var keep = RerollAdvisor.ShouldKeep(ratio, Settings.VoyageSettings.RerollKeepThreshold.Value);
-            ImGui.TextColored((keep ? Color.LightGreen : Color.OrangeRed).ToImguiVec4(),
-                keep
-                    ? $"Borders: R={ratio:F2} — KEEP"
-                    : $"Borders: R={ratio:F2} — REROLL (próximo: {RerollAdvisor.NextCost(_rerollCount):N0} sulphur)");
 
             int? sulphur = null;
             try
@@ -467,7 +463,23 @@ public partial class DeepwaterEngagementSuite
                 // fora de contexto deepwater o handler pode não estar legível
             }
 
-            if (sulphur != null)
+            var nextCost = RerollAdvisor.NextCost(_rerollCount);
+            if (keep)
+            {
+                ImGui.TextColored(Color.LightGreen.ToImguiVec4(), $"Borders: R={ratio:F2} — KEEP");
+            }
+            else if (sulphur is { } s && s < nextCost)
+            {
+                ImGui.TextColored(Color.Yellow.ToImguiVec4(),
+                    $"Borders: R={ratio:F2} — REROLL quando puder (sulphur: {s:N0}/{nextCost:N0})");
+            }
+            else
+            {
+                ImGui.TextColored(Color.OrangeRed.ToImguiVec4(),
+                    $"Borders: R={ratio:F2} — REROLL (próximo: {nextCost:N0} sulphur)");
+            }
+
+            if (sulphur != null && (keep || sulphur >= nextCost))
             {
                 ImGui.SameLine();
                 ImGui.Text($"(sulphur: {sulphur:N0})");
