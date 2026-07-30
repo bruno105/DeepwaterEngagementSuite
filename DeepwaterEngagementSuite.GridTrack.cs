@@ -241,6 +241,51 @@ public partial class DeepwaterEngagementSuite
         return row * 3 + c;
     }
 
+    /// <summary>
+    /// Ponto andável mais próximo de uma coordenada (busca radial no pathfinding).
+    /// Centros geométricos de célula podem cair em água/void — o Radar não rota até lá.
+    /// </summary>
+    private Vector2? SnapToWalkable(Vector2 grid)
+    {
+        try
+        {
+            var pf = _pathfindingData ?? GameController.IngameState.Data.RawPathfindingData;
+            if (pf is not { Length: > 0 } || pf[0] is not { Length: > 0 })
+            {
+                return null;
+            }
+
+            var h = pf.Length;
+            var w = pf[0].Length;
+            var cx = (int)grid.X;
+            var cy = (int)grid.Y;
+            if (cx >= 0 && cx < w && cy >= 0 && cy < h && pf[cy][cx] > 3)
+            {
+                return grid;
+            }
+
+            for (var radius = 8; radius <= 280; radius += 8)
+            {
+                for (var angle = 0; angle < 360; angle += 20)
+                {
+                    var (sin, cos) = MathF.SinCos(angle * MathF.PI / 180f);
+                    var x = cx + (int)(cos * radius);
+                    var y = cy + (int)(sin * radius);
+                    if (x >= 0 && x < w && y >= 0 && y < h && pf[y][x] > 3)
+                    {
+                        return new Vector2(x, y);
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // pathfinding indisponível
+        }
+
+        return null;
+    }
+
     private void GridTrackReset()
     {
         _gridOrigin = default;

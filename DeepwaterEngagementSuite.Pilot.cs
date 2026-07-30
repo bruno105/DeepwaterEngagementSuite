@@ -200,8 +200,11 @@ public partial class DeepwaterEngagementSuite
                     var center = new Vector2(
                         _gridOrigin.X + (c + 0.5f) / 3f * _gridSize.X,
                         _gridOrigin.Y + (r + 0.5f) / 3f * _gridSize.Y);
+                    // Centro geométrico pode ser inandável — snap para o terreno,
+                    // senão o Radar não consegue rotear e a seta vira linha reta.
+                    var target = SnapToWalkable(center) ?? center;
                     var prio = 40 + (int)(60 * _plannedMults[r, c] / maxPlanned);
-                    objectives.Add(($"Tile ({r},{c}) x{_plannedMults[r, c]:F1}", center, prio));
+                    objectives.Add(($"Tile ({r},{c}) x{_plannedMults[r, c]:F1}", target, prio));
                 }
             }
         }
@@ -241,9 +244,12 @@ public partial class DeepwaterEngagementSuite
             var color = settings.ObjectiveColor.Value;
             var targetScreen = GetWorldScreenPosition(obj.Pos);
 
+            // Re-pede a rota quando o alvo muda OU quando a última tentativa falhou
+            // (alvo inandável, pathfinding ainda não pronto) — senão fica preso na reta.
+            var targetChanged = Vector2.Distance(_pilotRouteTarget, obj.Pos) >= 40;
             if (settings.UseRadarRoute.Value &&
-                Vector2.Distance(_pilotRouteTarget, obj.Pos) >= 40 &&
-                (DateTime.UtcNow - _lastRouteRequest).TotalSeconds >= 1)
+                (targetChanged || _pilotRoute == null) &&
+                (DateTime.UtcNow - _lastRouteRequest).TotalSeconds >= 2)
             {
                 _lastRouteRequest = DateTime.UtcNow;
                 var lookForRoute = GameController.PluginBridge
