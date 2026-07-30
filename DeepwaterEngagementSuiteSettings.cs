@@ -175,6 +175,9 @@ public class PilotSettings
     [Menu("Grid debug mode", "Ativa o grid tracker em QUALQUER mapa - teste sem gastar voyage")]
     public ToggleNode GridDebugMode { get; set; } = new ToggleNode(false);
 
+    [Menu("Grid window size", "Largura do canvas da janela do grid tracker (px)")]
+    public RangeNode<int> GridWindowSize { get; set; } = new RangeNode<int>(260, 150, 600);
+
     public ColorNode GridColor { get; set; } = new ColorNode(Color.Cyan);
     public ColorNode PathColor { get; set; } = new ColorNode(Color.Magenta);
 

@@ -1,11 +1,12 @@
 using System;
 using System.Collections.Generic;
 using ExileCore.PoEMemory.Components;
-using ExileCore.PoEMemory.Elements;
 using ExileCore.Shared.Helpers;
 using GameOffsets.Native;
+using ImGuiNET;
 using SharpDX;
 using Vector2 = System.Numerics.Vector2;
+using Vector4 = System.Numerics.Vector4;
 
 namespace DeepwaterEngagementSuite;
 
@@ -109,12 +110,10 @@ public partial class DeepwaterEngagementSuite
             return;
         }
 
-        bool largeMapOpen;
         Vector2i dims;
         Vector2 playerPos;
         try
         {
-            largeMapOpen = GameController.Game.IngameState.IngameUi.Map.LargeMap.AsObject<SubMap>().IsVisible;
             dims = GameController.IngameState.Data.AreaDimensions;
             playerPos = GameController.Player?.GetComponent<Positioned>()?.WorldPosNum.WorldToGrid() ?? default;
         }
@@ -123,22 +122,40 @@ public partial class DeepwaterEngagementSuite
             return;
         }
 
-        if (!largeMapOpen || dims.X <= 0 || dims.Y <= 0 || playerPos == default)
+        if (dims.X <= 0 || dims.Y <= 0 || playerPos == default)
         {
             return;
         }
 
-        var gridColor = settings.GridColor.Value;
+        if (!ImGui.Begin("Grid Tracker", ImGuiWindowFlags.AlwaysAutoResize))
+        {
+            ImGui.End();
+            return;
+        }
 
-        // Bordas + linhas internas do grid 3x3.
+        var canvasW = (float)settings.GridWindowSize.Value;
+        var canvasH = canvasW * dims.Y / dims.X;
+        var origin = ImGui.GetCursorScreenPos();
+        var drawList = ImGui.GetWindowDrawList();
+
+        Vector2 ToCanvas(Vector2 grid) =>
+            origin + new Vector2(grid.X / dims.X * canvasW, grid.Y / dims.Y * canvasH);
+
+        var gridCol = ImGui.ColorConvertFloat4ToU32(settings.GridColor.Value.ToImguiVec4());
+        var pathCol = ImGui.ColorConvertFloat4ToU32(settings.PathColor.Value.ToImguiVec4());
+        var markerCol = ImGui.ColorConvertFloat4ToU32(Color.Gold.ToImguiVec4());
+        var playerCol = ImGui.ColorConvertFloat4ToU32(Color.White.ToImguiVec4());
+        var bgCol = ImGui.ColorConvertFloat4ToU32(new Vector4(0f, 0f, 0f, 0.45f));
+
+        drawList.AddRectFilled(origin, origin + new Vector2(canvasW, canvasH), bgCol);
+
+        // Grid 3x3 (bordas + linhas internas).
         for (var i = 0; i <= 3; i++)
         {
-            var x = dims.X * i / 3f;
-            var y = dims.Y * i / 3f;
-            Graphics.DrawLine(Graphics.GridToMap(new Vector2(x, 0), playerPos),
-                Graphics.GridToMap(new Vector2(x, dims.Y), playerPos), 1, gridColor);
-            Graphics.DrawLine(Graphics.GridToMap(new Vector2(0, y), playerPos),
-                Graphics.GridToMap(new Vector2(dims.X, y), playerPos), 1, gridColor);
+            var x = canvasW * i / 3f;
+            var y = canvasH * i / 3f;
+            drawList.AddLine(origin + new Vector2(x, 0), origin + new Vector2(x, canvasH), gridCol, 1f);
+            drawList.AddLine(origin + new Vector2(0, y), origin + new Vector2(canvasW, y), gridCol, 1f);
         }
 
         // Labels por célula: coordenada, ordem de entrada e tempo acumulado.
@@ -147,24 +164,34 @@ public partial class DeepwaterEngagementSuite
             for (var c = 0; c < 3; c++)
             {
                 var idx = r * 3 + c;
-                var center = new Vector2(dims.X * (c + 0.5f) / 3f, dims.Y * (r + 0.5f) / 3f);
                 var label = $"({r},{c})";
                 if (_cellFirstOrder[idx] > 0)
                 {
                     label += $" #{_cellFirstOrder[idx]} {(int)(_cellSeconds[idx] / 60)}:{(int)(_cellSeconds[idx] % 60):D2}";
                 }
 
-                Graphics.DrawTextWithBackground(label, Graphics.GridToMap(center, playerPos), gridColor, Color.Black);
+                var labelPos = origin + new Vector2(canvasW * c / 3f + 3, canvasH * r / 3f + 3);
+                drawList.AddText(labelPos, gridCol, label);
             }
         }
 
-        // Trilha do personagem (amostrada para limitar draw calls).
-        var pathColor = settings.PathColor.Value;
-        var step = Math.Max(1, _pathBreadcrumbs.Count / 250);
+        // Markers conhecidos (chests/eventos ainda não consumidos).
+        foreach (var cached in _cachedEntities.Values)
+        {
+            drawList.AddCircleFilled(ToCanvas(cached.GridPos), 2.5f, markerCol);
+        }
+
+        // Trilha do personagem (amostrada).
+        var step = Math.Max(1, _pathBreadcrumbs.Count / 300);
         for (var i = step; i < _pathBreadcrumbs.Count; i += step)
         {
-            Graphics.DrawLine(Graphics.GridToMap(_pathBreadcrumbs[i - step], playerPos),
-                Graphics.GridToMap(_pathBreadcrumbs[i], playerPos), 2, pathColor);
+            drawList.AddLine(ToCanvas(_pathBreadcrumbs[i - step]), ToCanvas(_pathBreadcrumbs[i]), pathCol, 1.5f);
         }
+
+        // Jogador.
+        drawList.AddCircleFilled(ToCanvas(playerPos), 4f, playerCol);
+
+        ImGui.Dummy(new Vector2(canvasW, canvasH));
+        ImGui.End();
     }
 }
