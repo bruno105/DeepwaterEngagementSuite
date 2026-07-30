@@ -149,6 +149,21 @@ public partial class DeepwaterEngagementSuite
 
         drawList.AddRectFilled(origin, origin + new Vector2(canvasW, canvasH), bgCol);
 
+        // Terreno gerado pelo Radar (textura "radar_minimap" cobre a área inteira),
+        // esticado para o canvas. Sem o Radar carregado, fica só o fundo escuro.
+        try
+        {
+            if (Graphics.HasImage("radar_minimap"))
+            {
+                drawList.AddImage(Graphics.GetTextureId("radar_minimap"),
+                    origin, origin + new Vector2(canvasW, canvasH));
+            }
+        }
+        catch
+        {
+            // Radar ausente ou textura ainda não gerada para a área
+        }
+
         // Grid 3x3 (bordas + linhas internas).
         for (var i = 0; i <= 3; i++)
         {
