@@ -30,6 +30,7 @@ public partial class DeepwaterEngagementSuite
     private int _rerollCount;
     private string _lastBorderKey;
     private (string Name, double Score, bool ReqMet)[] _strategyScores = [];
+    private readonly Dictionary<string, List<string>> _strategyMissing = new();
     private DateTime _lastStrategyEval = DateTime.MinValue;
     private VoyageStrategy _activeStrategy;
     private Task _run;
@@ -351,6 +352,14 @@ public partial class DeepwaterEngagementSuite
         AddItemMods(itemMods?.ImplicitMods, ModScope.Adjacent);
         AddItemMods(itemMods?.ExplicitMods, ModScope.Self);
 
+        // Nome da sala como pseudo-mod (peso 0): identifica charts especiais no pool
+        // (Sea Pillars, Kishara's Rest...) para requisitos de estratégia e pesos futuros.
+        var roomName = c.Room?.Name;
+        if (!string.IsNullOrEmpty(roomName))
+        {
+            modifiers.Add(new Modifier($"Room:{roomName}", 0, ModScope.Self));
+        }
+
         var biomeId = c.Room?.Biome?.Id;
         if (!string.IsNullOrEmpty(biomeId))
         {
@@ -579,6 +588,7 @@ public partial class DeepwaterEngagementSuite
                     for (var r = 0; r < 3; r++)
                         for (var c = 0; c < 3; c++)
                             sum += eff[r, c];
+                    _strategyMissing[s.Name] = s.MissingPieces(allPieces);
                     return (s.Name, Score: s.ScoreBoard(allPieces, sum, borderIds), ReqMet: s.RequirementsMet(borderIds));
                 }).ToArray();
             }
@@ -617,6 +627,20 @@ public partial class DeepwaterEngagementSuite
                 _activeStrategy = ResolveStrategy(Settings.VoyageSettings.SelectedStrategy.Value is { Length: > 0 } v ? v : "Auto");
                 ImGui.SameLine();
                 ImGui.Text($"usando: {_activeStrategy?.Name ?? "Base"}");
+
+                if (_activeStrategy != null)
+                {
+                    if (_strategyMissing.GetValueOrDefault(_activeStrategy.Name) is { Count: > 0 } missing)
+                    {
+                        ImGui.TextColored(Color.Yellow.ToImguiVec4(),
+                            $"FALTAM pecas ({_activeStrategy.Name}): {string.Join(", ", missing)} - speedrun boxes enquanto isso");
+                    }
+
+                    if (_activeStrategy.LayoutHint is { Length: > 0 } hint)
+                    {
+                        ImGui.TextColored(Color.Gray.ToImguiVec4(), hint);
+                    }
+                }
             }
         }
 
