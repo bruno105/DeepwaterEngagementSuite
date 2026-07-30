@@ -15,7 +15,9 @@
   substring, gates de border, requisitos de peças (FALTAM no painel), layout hints;
   seletor Auto/manual/Base dinâmico. Stats rolados (quant/6, sulphur/8, pack/8) viram
   pseudo-mods Self ("Stat:*") no BuildMapPiece — craft conta no valor próprio.
-  Posicionais (pins/centro/laterais) e reserva entre estratégias: integração upstream.
+  RESERVA implementada: Speedrun/AlcGo têm ReserveKeys; Solve filtra do pool (backfill
+  até 12 se faltar) e ScoreBoard exclui do top-9 (Auto honesto); UI mostra protegidos.
+  Posicionais (pins/centro/laterais): integração upstream.
 - **Reroll advisor**: R = Σ borders efetivos / baseline médio, pré-solve, por frame;
   custo 3000×2^n; sulphur-aware; contador com reset em AreaChange.
 - **Voyage Pilot**: fase/comportamento por estratégia, decay temporal de buffs, célula
