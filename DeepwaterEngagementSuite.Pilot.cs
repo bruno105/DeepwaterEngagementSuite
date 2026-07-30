@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ExileCore.PoEMemory.Components;
 using ExileCore.PoEMemory.MemoryObjects;
 using ExileCore.Shared.Enums;
 using ExileCore.Shared.Helpers;
@@ -72,6 +73,36 @@ public partial class DeepwaterEngagementSuite
         }
 
         var strategyName = _activeStrategy?.Name ?? "Base";
+
+        // Barco e fundo do mar são a MESMA área: "fora do campo" = fora de todas as
+        // bolhas de ar do handler (no barco o jogador fica longe de qualquer bolha).
+        var inField = true;
+        try
+        {
+            var bubbles = Bubbles;
+            if (bubbles is { Count: > 0 })
+            {
+                inField = bubbles.Any(b =>
+                    Vector2.Distance(_playerGridPos, new Vector2(b.Position.X, b.Position.Y)) <= b.Radius * 1.5f);
+            }
+        }
+        catch
+        {
+            // sem dados de bolhas, não esconder nada
+        }
+
+        if (!inField)
+        {
+            if (ImGui.Begin("Voyage Pilot", ImGuiWindowFlags.AlwaysAutoResize))
+            {
+                ImGui.TextColored(Color.Gray.ToImguiVec4(),
+                    $"{strategyName} - fora das bolhas (no barco?). Sem objetivos ativos.");
+            }
+
+            ImGui.End();
+            return;
+        }
+
         var overrides = PilotStrategyOverrides.GetValueOrDefault(strategyName);
 
         int Priority(string kind) =>
@@ -197,10 +228,23 @@ public partial class DeepwaterEngagementSuite
             // fora de contexto deepwater
         }
 
+        var goldenLanternStacks = 0;
+        try
+        {
+            goldenLanternStacks = GameController.Player?.GetComponent<Buffs>()?.BuffsList?
+                .Where(b => b?.Name == "deepwater_golden_lantern")
+                .Sum(b => b.Charges) ?? 0;
+        }
+        catch
+        {
+            // buffs ilegíveis em transição
+        }
+
         var rares = _statsMonsters.GetValueOrDefault(MonsterRarity.Rare);
         var uniques = _statsMonsters.GetValueOrDefault(MonsterRarity.Unique);
         ImGui.TextUnformatted(
             $"Kills R/U: {rares}/{uniques}   Lanterns: {PlacedLanternCount}/{Handler?.MaxLanternCount ?? 0}" +
+            (goldenLanternStacks > 0 ? $"   GL buff: {goldenLanternStacks}" : "") +
             (sulphur != null ? $"   Sulphur: {sulphur:N0}" : ""));
 
         if (kindCounts.Count > 0)
