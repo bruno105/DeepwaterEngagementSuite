@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using ExileCore.PoEMemory.Components;
+using ExileCore.PoEMemory.Elements;
 using ExileCore.PoEMemory.MemoryObjects;
 using ExileCore.Shared.Enums;
 using ExileCore.Shared.Helpers;
@@ -36,6 +37,8 @@ public partial class DeepwaterEngagementSuite
             return;
         }
 
+        var tooltipRect = GetHoverTooltipRect();
+
         foreach (var invItem in items)
         {
             var entity = invItem.Item;
@@ -46,6 +49,10 @@ public partial class DeepwaterEngagementSuite
 
             var (color, tag) = ClassifyChart(entity, chart);
             var rect = invItem.GetClientRectCache;
+            if (tooltipRect.Intersects(rect))
+            {
+                continue; // não desenhar por cima do tooltip (padrão NinjaPrice/Beasts)
+            }
             Graphics.DrawFrame(rect.TopLeft.ToVector2Num(), rect.BottomRight.ToVector2Num(), color, 2);
             if (!string.IsNullOrEmpty(tag))
             {
@@ -91,6 +98,20 @@ public partial class DeepwaterEngagementSuite
         }
 
         return (Color.OrangeRed, null);
+    }
+
+    /// <summary>Rect do tooltip do item em hover (vazio se nenhum) — para não desenhar por cima.</summary>
+    private RectangleF GetHoverTooltipRect()
+    {
+        try
+        {
+            return GameController.IngameState.UIHover?.AsObject<HoverItemIcon>()?.Tooltip?.GetClientRect()
+                   ?? new RectangleF(0, 0, 0, 0);
+        }
+        catch
+        {
+            return new RectangleF(0, 0, 0, 0);
+        }
     }
 
     /// <summary>Soma os valores de stat cujo Key contenha o termo, em TODOS os mods do item.</summary>

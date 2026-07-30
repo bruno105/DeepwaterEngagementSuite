@@ -301,8 +301,14 @@ public partial class DeepwaterEngagementSuite
                 .ToHashSet()
             : [];
 
+        var hoverTooltipRect = GetHoverTooltipRect();
         for (int i = 0; i < charts.Count; i++)
         {
+            if (hoverTooltipRect.Intersects(charts[i].GetClientRectCache))
+            {
+                continue; // não desenhar por cima do tooltip do chart em hover
+            }
+
             var chartTopLeft = charts[i].GetClientRectCache.TopLeft.ToVector2Num();
             Graphics.DrawTextWithBackground($"#{i}", chartTopLeft, Color.Black);
             if (!Settings.VoyageSettings.ShowChartValues.Value || chartEntries[i].Piece is not { } piece)
