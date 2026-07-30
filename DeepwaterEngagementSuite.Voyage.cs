@@ -333,6 +333,18 @@ public partial class DeepwaterEngagementSuite
         }
     }
 
+    // Texto de UI seguro: TextUnformatted (o '%' de "110%+" vira format string no
+    // ImGui.Text e corrompe a saída) + wrap fixo — a janela é auto-resize, então
+    // wrap na borda (0) deixaria ela crescer sem limite.
+    private static void WrappedText(Color color, string text, float wrapWidth = 620f)
+    {
+        ImGui.PushStyleColor(ImGuiCol.Text, color.ToImguiVec4());
+        ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + wrapWidth);
+        ImGui.TextUnformatted(text);
+        ImGui.PopTextWrapPos();
+        ImGui.PopStyleColor();
+    }
+
     /// <summary>Constrói a peça do solver a partir de um chart do estoque (mods + bioma). Null se inválido.</summary>
     private MapPiece BuildMapPiece(NormalInventoryItem chart, int index)
     {
@@ -626,9 +638,14 @@ public partial class DeepwaterEngagementSuite
             {
                 var bestName = _strategyScores.MaxBy(x => x.Score).Name;
                 ImGui.Text("Estrategias:");
-                foreach (var (name, score, reqMet) in _strategyScores)
+                for (var i = 0; i < _strategyScores.Length; i++)
                 {
-                    ImGui.SameLine();
+                    var (name, score, reqMet) = _strategyScores[i];
+                    if (i == 0 || i % 3 != 0)
+                    {
+                        ImGui.SameLine();
+                    }
+
                     var color = name == bestName ? Color.LightGreen : Color.Gray;
                     ImGui.TextColored(color.ToImguiVec4(), $"{name}: {score:F0}{(reqMet ? "" : " (sem border)")}");
                 }
@@ -661,13 +678,13 @@ public partial class DeepwaterEngagementSuite
                 {
                     if (_strategyMissing.GetValueOrDefault(_activeStrategy.Name) is { Count: > 0 } missing)
                     {
-                        ImGui.TextColored(Color.Yellow.ToImguiVec4(),
+                        WrappedText(Color.Yellow,
                             $"FALTAM pecas ({_activeStrategy.Name}): {string.Join(", ", missing)} - speedrun boxes enquanto isso");
                     }
 
                     if (_activeStrategy.LayoutHint is { Length: > 0 } hint)
                     {
-                        ImGui.TextColored(Color.Gray.ToImguiVec4(), hint);
+                        WrappedText(Color.Gray, hint);
                     }
                 }
             }
