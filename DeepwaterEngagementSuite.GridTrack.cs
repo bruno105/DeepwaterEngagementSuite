@@ -37,6 +37,15 @@ public partial class DeepwaterEngagementSuite
             return;
         }
 
+        // No barco (fora das bolhas) não acumula trilha nem tempo de célula — o tempo
+        // de barco poluiria cellSeconds/duração do run (mesma instância, teleporte).
+        if (Handler != null && !IsPlayerInField(playerPos.Value))
+        {
+            _lastCellIndex = -1;
+            _lastCellSample = DateTime.MinValue;
+            return;
+        }
+
         var now = DateTime.UtcNow;
         if ((now - _lastBreadcrumb).TotalMilliseconds >= 500)
         {
@@ -228,10 +237,15 @@ public partial class DeepwaterEngagementSuite
             drawList.AddCircleFilled(ToCanvas(cached.GridPos), 2.5f, markerCol);
         }
 
-        // Trilha do personagem (amostrada).
+        // Trilha do personagem (amostrada); saltos grandes (teleporte) não viram linha.
         var step = Math.Max(1, _pathBreadcrumbs.Count / 300);
         for (var i = step; i < _pathBreadcrumbs.Count; i += step)
         {
+            if (Vector2.Distance(_pathBreadcrumbs[i - step], _pathBreadcrumbs[i]) > 250)
+            {
+                continue;
+            }
+
             drawList.AddLine(ToCanvas(_pathBreadcrumbs[i - step]), ToCanvas(_pathBreadcrumbs[i]), pathCol, 1.5f);
         }
 

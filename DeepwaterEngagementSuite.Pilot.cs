@@ -75,6 +75,30 @@ public partial class DeepwaterEngagementSuite
         },
     };
 
+    /// <summary>
+    /// Barco e fundo do mar são a MESMA instância (sair do chart = teleporte no mapa):
+    /// "no campo" = dentro de alguma bolha de ar do handler (raio ×1.5).
+    /// Sem bolhas/handler (mapas normais em debug), considera sempre no campo.
+    /// </summary>
+    private bool IsPlayerInField(Vector2 playerGridPos)
+    {
+        try
+        {
+            var bubbles = Bubbles;
+            if (bubbles is { Count: > 0 })
+            {
+                return bubbles.Any(b =>
+                    Vector2.Distance(playerGridPos, new Vector2(b.Position.X, b.Position.Y)) <= b.Radius * 1.5f);
+            }
+        }
+        catch
+        {
+            // sem dados de bolhas, não esconder nada
+        }
+
+        return true;
+    }
+
     private void DrawVoyagePilot()
     {
         var settings = Settings.PilotSettings;
@@ -90,22 +114,7 @@ public partial class DeepwaterEngagementSuite
 
         var strategyName = _activeStrategy?.Name ?? "Base";
 
-        // Barco e fundo do mar são a MESMA área: "fora do campo" = fora de todas as
-        // bolhas de ar do handler (no barco o jogador fica longe de qualquer bolha).
-        var inField = true;
-        try
-        {
-            var bubbles = Bubbles;
-            if (bubbles is { Count: > 0 })
-            {
-                inField = bubbles.Any(b =>
-                    Vector2.Distance(_playerGridPos, new Vector2(b.Position.X, b.Position.Y)) <= b.Radius * 1.5f);
-            }
-        }
-        catch
-        {
-            // sem dados de bolhas, não esconder nada
-        }
+        var inField = IsPlayerInField(_playerGridPos);
 
         if (!inField)
         {
