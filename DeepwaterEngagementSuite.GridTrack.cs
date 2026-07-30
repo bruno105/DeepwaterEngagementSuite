@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using ExileCore.PoEMemory.Components;
 using ExileCore.Shared.Helpers;
 using GameOffsets.Native;
@@ -78,21 +79,21 @@ public partial class DeepwaterEngagementSuite
         }
     }
 
-    // Região real do grid 3x3: a área da voyage inclui o barco e padding, então dims/3
-    // não casa com a costura dos charts. Âncora: bounding box de Handler.Monsters
-    // (lista server-side completa; monstros não spawnam no barco). Fallback: área toda.
+    // Região real do mapa jogável: a área inclui o barco (componente separado de
+    // terreno) e padding. Âncora definitiva: MAIOR componente conexo do terreno
+    // andável (pathfinding), conhecido inteiro desde o load — os 9 charts costurados
+    // na voyage, a sala única no chart solo. Computado uma vez por área, em background.
     private Vector2 _gridOrigin;
     private Vector2 _gridSize;
-    private DateTime _gridBoundsAt = DateTime.MinValue;
+    private bool _regionComputed;
+    private volatile bool _regionComputing;
 
     private void UpdateGridBounds()
     {
-        if ((DateTime.UtcNow - _gridBoundsAt).TotalSeconds < 2)
+        if (_regionComputed || _regionComputing)
         {
             return;
         }
-
-        _gridBoundsAt = DateTime.UtcNow;
 
         Vector2i dims;
         try
@@ -109,49 +110,112 @@ public partial class DeepwaterEngagementSuite
             return;
         }
 
-        float minX = float.MaxValue, minY = float.MaxValue, maxX = float.MinValue, maxY = float.MinValue;
-        var count = 0;
+        // Fallback imediato (área toda) enquanto o cálculo roda.
+        if (_gridSize == default)
+        {
+            _gridOrigin = default;
+            _gridSize = new Vector2(dims.X, dims.Y);
+        }
+
+        _regionComputing = true;
+        Task.Run(ComputeRegionFromTerrain);
+    }
+
+    private void ComputeRegionFromTerrain()
+    {
         try
         {
-            foreach (var monster in Handler?.Monsters ?? [])
+            var pf = _pathfindingData ?? GameController.IngameState.Data.RawPathfindingData;
+            if (pf is not { Length: > 0 } || pf[0] is not { Length: > 0 })
             {
-                if (monster is not { IsValid: true })
-                {
-                    continue;
-                }
+                return;
+            }
 
-                var p = monster.GridPosNum;
-                if (p.X <= 0 || p.Y <= 0)
-                {
-                    continue;
-                }
+            var h = pf.Length;
+            var w = pf[0].Length;
+            const int step = 8;
+            var gh = h / step;
+            var gw = w / step;
+            if (gh < 3 || gw < 3)
+            {
+                return;
+            }
 
-                minX = Math.Min(minX, p.X);
-                minY = Math.Min(minY, p.Y);
-                maxX = Math.Max(maxX, p.X);
-                maxY = Math.Max(maxY, p.Y);
-                count++;
+            var walkable = new bool[gh, gw];
+            for (var y = 0; y < gh; y++)
+            {
+                for (var x = 0; x < gw; x++)
+                {
+                    walkable[y, x] = pf[y * step][x * step] > 3;
+                }
+            }
+
+            // Flood fill: maior componente conexo = mapa jogável (barco é componente menor).
+            var visited = new bool[gh, gw];
+            var bestCount = 0;
+            int bestMinX = 0, bestMinY = 0, bestMaxX = 0, bestMaxY = 0;
+            var stack = new Stack<(int Y, int X)>();
+            for (var sy = 0; sy < gh; sy++)
+            {
+                for (var sx = 0; sx < gw; sx++)
+                {
+                    if (!walkable[sy, sx] || visited[sy, sx])
+                    {
+                        continue;
+                    }
+
+                    var count = 0;
+                    int minX = sx, minY = sy, maxX = sx, maxY = sy;
+                    stack.Push((sy, sx));
+                    visited[sy, sx] = true;
+                    while (stack.TryPop(out var cur))
+                    {
+                        count++;
+                        minX = Math.Min(minX, cur.X);
+                        minY = Math.Min(minY, cur.Y);
+                        maxX = Math.Max(maxX, cur.X);
+                        maxY = Math.Max(maxY, cur.Y);
+                        Span<(int, int)> neighbors = [(cur.Y - 1, cur.X), (cur.Y + 1, cur.X), (cur.Y, cur.X - 1), (cur.Y, cur.X + 1)];
+                        foreach (var (ny, nx) in neighbors)
+                        {
+                            if (ny >= 0 && ny < gh && nx >= 0 && nx < gw && walkable[ny, nx] && !visited[ny, nx])
+                            {
+                                visited[ny, nx] = true;
+                                stack.Push((ny, nx));
+                            }
+                        }
+                    }
+
+                    if (count > bestCount)
+                    {
+                        bestCount = count;
+                        bestMinX = minX;
+                        bestMinY = minY;
+                        bestMaxX = maxX;
+                        bestMaxY = maxY;
+                    }
+                }
+            }
+
+            if (bestCount > 0)
+            {
+                const float pad = 12f;
+                var originX = Math.Max(0, bestMinX * step - pad);
+                var originY = Math.Max(0, bestMinY * step - pad);
+                _gridOrigin = new Vector2(originX, originY);
+                _gridSize = new Vector2(
+                    Math.Min(w, (bestMaxX + 1) * step + pad) - originX,
+                    Math.Min(h, (bestMaxY + 1) * step + pad) - originY);
+                _regionComputed = true;
             }
         }
         catch
         {
-            // handler ilegível; mantém bounds atuais
+            // terreno indisponível em transição; tenta de novo no próximo tick
         }
-
-        if (count >= 30)
+        finally
         {
-            const float pad = 40f;
-            var originX = Math.Max(0, minX - pad);
-            var originY = Math.Max(0, minY - pad);
-            _gridOrigin = new Vector2(originX, originY);
-            _gridSize = new Vector2(
-                Math.Min(dims.X, maxX + pad) - originX,
-                Math.Min(dims.Y, maxY + pad) - originY);
-        }
-        else
-        {
-            _gridOrigin = default;
-            _gridSize = new Vector2(dims.X, dims.Y);
+            _regionComputing = false;
         }
     }
 
@@ -181,7 +245,7 @@ public partial class DeepwaterEngagementSuite
     {
         _gridOrigin = default;
         _gridSize = default;
-        _gridBoundsAt = DateTime.MinValue;
+        _regionComputed = false;
         _pathBreadcrumbs.Clear();
         Array.Clear(_cellSeconds);
         Array.Clear(_cellFirstOrder);
@@ -263,8 +327,20 @@ public partial class DeepwaterEngagementSuite
             // Radar ausente ou textura ainda não gerada para a área
         }
 
+        // Grade 3x3 só faz sentido em voyage (costura de 9 charts) ou no modo debug;
+        // em chart solo a janela é a visão da sala inteira, sem grade.
+        var showCells = settings.GridDebugMode.Value;
+        try
+        {
+            showCells |= (Handler?.MaxLanternCount ?? 0) > 7;
+        }
+        catch
+        {
+            // handler ilegível
+        }
+
         // Heat do plano: células pintadas pela força do multiplicador do solve.
-        if (_plannedMults != null)
+        if (showCells && _plannedMults != null)
         {
             var maxMult = 0.01;
             for (var r = 0; r < 3; r++)
@@ -289,31 +365,39 @@ public partial class DeepwaterEngagementSuite
             }
         }
 
-        // Grid 3x3 (bordas + linhas internas).
-        for (var i = 0; i <= 3; i++)
+        if (showCells)
         {
-            var x = canvasW * i / 3f;
-            var y = canvasH * i / 3f;
-            drawList.AddLine(origin + new Vector2(x, 0), origin + new Vector2(x, canvasH), gridCol, 1f);
-            drawList.AddLine(origin + new Vector2(0, y), origin + new Vector2(canvasW, y), gridCol, 1f);
-        }
-
-        // Labels por célula (convenção do board: (0,0) = canto inferior esquerdo).
-        for (var rowFromTop = 0; rowFromTop < 3; rowFromTop++)
-        {
-            for (var c = 0; c < 3; c++)
+            // Grid 3x3 (bordas + linhas internas).
+            for (var i = 0; i <= 3; i++)
             {
-                var boardRow = 2 - rowFromTop;
-                var idx = boardRow * 3 + c;
-                var label = $"({boardRow},{c})";
-                if (_cellFirstOrder[idx] > 0)
-                {
-                    label += $" #{_cellFirstOrder[idx]} {(int)(_cellSeconds[idx] / 60)}:{(int)(_cellSeconds[idx] % 60):D2}";
-                }
-
-                var labelPos = origin + new Vector2(canvasW * c / 3f + 3, canvasH * rowFromTop / 3f + 3);
-                drawList.AddText(labelPos, gridCol, label);
+                var x = canvasW * i / 3f;
+                var y = canvasH * i / 3f;
+                drawList.AddLine(origin + new Vector2(x, 0), origin + new Vector2(x, canvasH), gridCol, 1f);
+                drawList.AddLine(origin + new Vector2(0, y), origin + new Vector2(canvasW, y), gridCol, 1f);
             }
+
+            // Labels por célula (convenção do board: (0,0) = canto inferior esquerdo).
+            for (var rowFromTop = 0; rowFromTop < 3; rowFromTop++)
+            {
+                for (var c = 0; c < 3; c++)
+                {
+                    var boardRow = 2 - rowFromTop;
+                    var idx = boardRow * 3 + c;
+                    var label = $"({boardRow},{c})";
+                    if (_cellFirstOrder[idx] > 0)
+                    {
+                        label += $" #{_cellFirstOrder[idx]} {(int)(_cellSeconds[idx] / 60)}:{(int)(_cellSeconds[idx] % 60):D2}";
+                    }
+
+                    var labelPos = origin + new Vector2(canvasW * c / 3f + 3, canvasH * rowFromTop / 3f + 3);
+                    drawList.AddText(labelPos, gridCol, label);
+                }
+            }
+        }
+        else
+        {
+            // Chart solo: só a moldura da sala.
+            drawList.AddRect(origin, origin + new Vector2(canvasW, canvasH), gridCol);
         }
 
         // Markers conhecidos (chests/eventos ainda não consumidos).
