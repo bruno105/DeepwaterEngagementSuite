@@ -262,7 +262,11 @@ public partial class DeepwaterEngagementSuite
                     _pilotRoute = null;
                     try
                     {
-                        lookForRoute(obj.Pos, route => _pilotRoute = route, _pilotRouteCts.Token);
+                        // Baús/drops/alvos do Pointer podem estar sobre decoração
+                        // inandável — rotear até o ponto andável mais próximo, senão
+                        // o Radar falha para sempre (o retry repete o mesmo alvo).
+                        var routeTarget = SnapToWalkable(obj.Pos) ?? obj.Pos;
+                        lookForRoute(routeTarget, route => _pilotRoute = route, _pilotRouteCts.Token);
                     }
                     catch
                     {
