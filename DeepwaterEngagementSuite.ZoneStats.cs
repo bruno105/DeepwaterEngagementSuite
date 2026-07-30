@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using ExileCore.PoEMemory.Components;
 using ExileCore.PoEMemory.MemoryObjects;
 using ExileCore.Shared.Enums;
 using ExileCore.Shared.Helpers;
@@ -40,6 +41,12 @@ public partial class DeepwaterEngagementSuite
     private int _statsPlacedLanterns;
     private Dictionary<string, int> _statsMapStats;
     private DateTime _statsMapStatsAt = DateTime.MinValue;
+    private DateTime _statsBiomeAt = DateTime.MinValue;
+    // Drops no chão (chart runs não têm reward window): labels visíveis = o que o
+    // loot filter do jogador considera relevante. Dedup por entidade.
+    private readonly HashSet<uint> _statsSeenDrops = new();
+    private readonly Dictionary<string, int> _statsDrops = new();
+    private DateTime _statsDropScanAt = DateTime.MinValue;
     // Contexto do plano (setado no Place): previsto vs realizado por tile.
     private double[,] _plannedMults;
     private string _plannedStrategy;
@@ -142,21 +149,22 @@ public partial class DeepwaterEngagementSuite
             }
         }
 
-        if (_statsBiome == null)
+        // Retry com throttle: o .dat pode não estar carregado nos primeiros ticks.
+        if (string.IsNullOrEmpty(_statsBiome) && (DateTime.UtcNow - _statsBiomeAt).TotalSeconds >= 2)
         {
+            _statsBiomeAt = DateTime.UtcNow;
             try
             {
                 var worldArea = GameController.Area.CurrentArea?.Area;
                 if (worldArea != null)
                 {
-                    var biome = GameController.Files.DeepwaterBiomes.EntriesList
-                        .FirstOrDefault(b => b.WorldArea?.Address == worldArea.Address);
-                    _statsBiome = biome?.Id ?? "";
+                    _statsBiome = GameController.Files.DeepwaterBiomes.EntriesList
+                        .FirstOrDefault(b => b.WorldArea?.Address == worldArea.Address)?.Id;
                 }
             }
             catch
             {
-                _statsBiome = "";
+                // tenta de novo no próximo ciclo
             }
         }
 
@@ -196,7 +204,56 @@ public partial class DeepwaterEngagementSuite
             }
         }
 
+        ZoneStatsScanGroundLoot();
         ZoneStatsScanRewards();
+    }
+
+    private void ZoneStatsScanGroundLoot()
+    {
+        if ((DateTime.UtcNow - _statsDropScanAt).TotalMilliseconds < 1000)
+        {
+            return;
+        }
+
+        _statsDropScanAt = DateTime.UtcNow;
+        try
+        {
+            var labels = GameController.IngameState.IngameUi.ItemsOnGroundLabelElement.VisibleGroundItemLabels;
+            if (labels == null)
+            {
+                return;
+            }
+
+            foreach (var label in labels)
+            {
+                var ground = label.Entity;
+                if (ground == null || !_statsSeenDrops.Add(ground.Id))
+                {
+                    continue;
+                }
+
+                var item = ground.GetComponent<WorldItem>()?.ItemEntity;
+                if (item == null)
+                {
+                    continue;
+                }
+
+                var baseType = GameController.Files.BaseItemTypes.Translate(item.Path);
+                // Só classes que definem lucro: currency, scarabs (MapFragment), cards e maps.
+                if (baseType?.ClassName is not ("StackableCurrency" or "DivinationCard" or "Map" or "MapFragment"))
+                {
+                    continue;
+                }
+
+                var stack = item.GetComponent<Stack>()?.Size ?? 1;
+                var name = baseType.BaseName;
+                _statsDrops[name] = _statsDrops.GetValueOrDefault(name) + stack;
+            }
+        }
+        catch
+        {
+            // labels em transição; tenta no próximo scan
+        }
     }
 
     private void ZoneStatsScanRewards()
@@ -283,6 +340,8 @@ public partial class DeepwaterEngagementSuite
                 sb.Append(string.Join(",", _statsChests.Select(kv => $"\"{kv.Key}\":{kv.Value}")));
                 sb.Append("},\"rewards\":{");
                 sb.Append(string.Join(",", _statsRewards.Select(kv => $"\"{kv.Key.Replace("\"", "")}\":{kv.Value}")));
+                sb.Append("},\"drops\":{");
+                sb.Append(string.Join(",", _statsDrops.Select(kv => $"\"{kv.Key.Replace("\"", "")}\":{kv.Value}")));
                 sb.Append("},\"cellSeconds\":[");
                 sb.Append(string.Join(",", _cellSeconds.Select(s => ((int)s).ToString())));
                 sb.Append("],\"cellOrder\":[");
@@ -334,6 +393,9 @@ public partial class DeepwaterEngagementSuite
         _statsPlacedLanterns = 0;
         _statsMapStats = null;
         _statsMapStatsAt = DateTime.MinValue;
+        _statsBiomeAt = DateTime.MinValue;
+        _statsSeenDrops.Clear();
+        _statsDrops.Clear();
         Array.Clear(_cellSulphurGain);
         Array.Clear(_cellChestsOpened);
         Array.Clear(_cellMonstersSeen);
