@@ -372,9 +372,10 @@ public partial class DeepwaterEngagementSuite
             // Radar ausente ou textura ainda não gerada para a área
         }
 
-        // Grade 3x3 só faz sentido em voyage (costura de 9 charts) ou no modo debug;
-        // em chart solo a janela é a visão da sala inteira, sem grade.
-        var showCells = settings.GridDebugMode.Value;
+        // Grade 3x3 só faz sentido em voyage (costura de 9 charts); o modo debug força
+        // a grade apenas em mapa NORMAL (sem Handler) — em chart solo deepwater a
+        // janela é a visão da sala inteira, sem grade, mesmo com debug ligado.
+        var showCells = Handler == null && settings.GridDebugMode.Value;
         try
         {
             showCells |= (Handler?.MaxLanternCount ?? 0) > 7;
