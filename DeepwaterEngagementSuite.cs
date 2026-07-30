@@ -283,7 +283,7 @@ public partial class DeepwaterEngagementSuite : BaseSettingsPlugin<DeepwaterEnga
             if (GetEntityType(entity.Path) == ExpeditionEntityType.None)
                 continue;
 
-            if (entity.IsOpened)
+            if (entity.IsOpened || IsConsumedEncounter(entity))
             {
                 _cachedEntities.Remove(entity.Id);
                 continue;
@@ -837,10 +837,34 @@ public partial class DeepwaterEngagementSuite : BaseSettingsPlugin<DeepwaterEnga
         ZoneStatsOnMonsterAdded(entity);
         if ((entity.Type is EntityType.Chest or EntityType.Terrain or EntityType.IngameIcon)
             && GetEntityType(entity.Path) != ExpeditionEntityType.None
-            && !entity.IsOpened)
+            && !entity.IsOpened
+            && !IsConsumedEncounter(entity))
         {
             _cachedEntities[entity.Id] = BuildCacheItem(entity);
             ZoneStatsOnMarkerAdded(entity);
+        }
+    }
+
+    /// <summary>
+    /// Encontros de terreno (LanternReplenish, altares etc.) não têm IsOpened: quando
+    /// consumidos, o state "activated" liga no StateMachine (validado via bridge —
+    /// a entidade continua válida no mundo com Targetable desligado).
+    /// </summary>
+    private static bool IsConsumedEncounter(Entity entity)
+    {
+        if (entity.Type != EntityType.Terrain)
+        {
+            return false;
+        }
+
+        try
+        {
+            var states = entity.GetComponent<StateMachine>()?.States;
+            return states != null && states.Any(s => s.Name == "activated" && s.Value >= 1);
+        }
+        catch
+        {
+            return false;
         }
     }
 
