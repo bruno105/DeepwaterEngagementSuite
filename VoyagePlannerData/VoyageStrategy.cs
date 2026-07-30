@@ -21,7 +21,8 @@ public record VoyageStrategy(
     StrategyBoost[] BorderBoosts,
     string[] RequiredBorderKeys,
     PieceRequirement[] PieceRequirements = null,
-    string LayoutHint = null)
+    string LayoutHint = null,
+    string[] ReserveKeys = null)
 {
     public const double MissingRequirementPenalty = 0.2;
 
@@ -51,7 +52,14 @@ public record VoyageStrategy(
             [
                 new PieceRequirement("1x Operative/Diviner/Bottle", 1, ["OperativeBox", "DivinerBox", "LostMessage"]),
             ],
-            "Milky: UM Operative no CENTRO (fallback Diviner/Bottle) | quant 110%+ ANTES de rodar | maiores quants nas 4 laterais | Alch/Scour/Ex p/ juicar boxes | border Filthscrabble (polvo ~4k sulphur): chart de mais sulphur NELE"),
+            "Milky: UM Operative no CENTRO (fallback Diviner/Bottle) | quant 110%+ ANTES de rodar | maiores quants nas 4 laterais | Alch/Scour/Ex p/ juicar boxes | border Filthscrabble (polvo ~4k sulphur): chart de mais sulphur NELE",
+            // Site: "never burns your juice pieces" — reservadas p/ as outras strats.
+            ReserveKeys:
+            [
+                "Starfish", "Pantheon", "GoldenLanterns", "MonstersPossessed", "RareFracture",
+                "IncreasedRareMonsters", "NoEquipmentDrops", "Wisps", "MagicMonsters",
+                "Strongboxes", "Room:Sea Pillars", "Room:Pelagic Abyss",
+            ]),
         // milky-meatfish. Regex: "cannot|poss|lantern|pantheon". Site: star/pantheon/
         // lantern/possess 10; fracture 8, voyage:rare 8, adjacent:rare 6; border:rare 9;
         // self:quant 4, rarity 3. Composição: 2× Starfish, 1× Pantheon (ou 4k Wisps),
@@ -147,7 +155,15 @@ public record VoyageStrategy(
             [],
             [],
             null,
-            "Queimar o refugo: 3 pistas ligadas por baixo | Alc & Go, colocar lanterns, clicar tudo, sair | NÃO queimar peças das outras strats (Starfish/Pantheon/GL/Possessed/Fracture/IncRares/NoEquip/Wisps/Boxes/Pillar/Pelagic)"),
+            "Queimar o refugo: 3 pistas ligadas por baixo | Alc & Go, colocar lanterns, clicar tudo, sair | NÃO queimar peças das outras strats (Starfish/Pantheon/GL/Possessed/Fracture/IncRares/NoEquip/Wisps/Boxes/Pillar/Pelagic)",
+            // Reserva do site: juice pieces + boxes de centro + pillar/pelagic.
+            ReserveKeys:
+            [
+                "Starfish", "Pantheon", "GoldenLanterns", "MonstersPossessed", "RareFracture",
+                "IncreasedRareMonsters", "NoEquipmentDrops", "Wisps", "MagicMonsters",
+                "Strongboxes", "Room:Sea Pillars", "Room:Pelagic Abyss",
+                "OperativeBox", "DivinerBox", "ArcanistBox", "LostMessage",
+            ]),
     ];
 
     public double BoostChartWeight(string modName, double weight)
@@ -177,6 +193,14 @@ public record VoyageStrategy(
         return multiplier;
     }
 
+    /// <summary>
+    /// Peça reservada para OUTRAS estratégias (site: "never burns your juice pieces").
+    /// Só as estratégias de queima (Speedrun/AlcGo) declaram ReserveKeys.
+    /// </summary>
+    public bool IsReserved(MapPiece piece) =>
+        ReserveKeys is { Length: > 0 } &&
+        piece.Modifiers.Any(m => ReserveKeys.Any(k => m.Name.Contains(k, StringComparison.OrdinalIgnoreCase)));
+
     /// <summary>Reconstrói a peça com pesos boostados (recalcula as somas Own/Local/Global).</summary>
     public MapPiece BoostPiece(MapPiece piece) =>
         new(piece.Id, piece.Type, piece.BaseConnections,
@@ -205,7 +229,11 @@ public record VoyageStrategy(
 
     public double ScoreBoard(IReadOnlyCollection<MapPiece> allPieces, double effectiveMultSum, IEnumerable<string> borderIds)
     {
+        // Peças reservadas ficam fora do score — senão o Auto infla a estratégia de
+        // queima com juice alheio (Starfish contando no top-9 do Speedrun) e escolhe
+        // um plano que o Solve (que respeita a reserva) não vai montar.
         var top9 = allPieces
+            .Where(p => !IsReserved(p))
             .Select(BoostPiece)
             .Select(p => p.OwnModifier + p.LocalModifier + p.GlobalModifier)
             .OrderByDescending(v => v)

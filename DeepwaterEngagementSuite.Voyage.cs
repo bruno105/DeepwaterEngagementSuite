@@ -30,6 +30,7 @@ public partial class DeepwaterEngagementSuite
     private int _rerollCount;
     private string _lastBorderKey;
     private (string Name, double Score, bool ReqMet)[] _strategyScores = [];
+    private volatile int _solveReservedCount;
     private readonly Dictionary<string, List<string>> _strategyMissing = new();
     private DateTime _lastStrategyEval = DateTime.MinValue;
     private VoyageStrategy _activeStrategy;
@@ -542,6 +543,27 @@ public partial class DeepwaterEngagementSuite
                     i++;
                 }
 
+                // Reserva (site one-more-map): estratégias de queima não escalam
+                // peças das outras — a menos que falte chart p/ fechar o board
+                // (backfill com as reservadas de MENOR valor até 12 = 9 + folga
+                // de conexões).
+                _solveReservedCount = 0;
+                if (solveStrategy?.ReserveKeys is { Length: > 0 })
+                {
+                    var usable = pieces.Where(p => !solveStrategy.IsReserved(p)).ToList();
+                    const int minPool = 12;
+                    if (usable.Count < minPool)
+                    {
+                        usable.AddRange(pieces
+                            .Where(solveStrategy.IsReserved)
+                            .OrderBy(p => p.OwnModifier + p.LocalModifier + p.GlobalModifier)
+                            .Take(minPool - usable.Count));
+                    }
+
+                    _solveReservedCount = pieces.Count - usable.Count;
+                    pieces = usable;
+                }
+
                 var maxCharts = Settings.VoyageSettings.SolverMaxCharts.Value;
                 if (maxCharts > 0 && pieces.Count > maxCharts)
                 {
@@ -673,6 +695,12 @@ public partial class DeepwaterEngagementSuite
                 _activeStrategy = ResolveStrategy(Settings.VoyageSettings.SelectedStrategy.Value is { Length: > 0 } v ? v : "Auto");
                 ImGui.SameLine();
                 ImGui.Text($"usando: {_activeStrategy?.Name ?? "Base"}");
+                if (_solveReservedCount > 0)
+                {
+                    ImGui.SameLine();
+                    ImGui.TextColored(Color.Gray.ToImguiVec4(),
+                        $"(reserva: {_solveReservedCount} charts protegidos p/ outras strats)");
+                }
 
                 if (_activeStrategy != null)
                 {
