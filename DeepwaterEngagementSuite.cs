@@ -348,6 +348,7 @@ public partial class DeepwaterEngagementSuite : BaseSettingsPlugin<DeepwaterEnga
         if (!largePanelsOpen)
         {
             DrawPointerHints();
+            DrawVoyagePilot();
         }
 
         if (!largePanelsOpen && (Settings.BubbleSettings.ShowBubblesOnMap ||

@@ -51,6 +51,8 @@ public class DeepwaterEngagementSuiteSettings : ISettings
 
     public HintSettings HintSettings { get; set; } = new HintSettings();
 
+    public PilotSettings PilotSettings { get; set; } = new PilotSettings();
+
     [Menu("Collect zone stats", "Grava monstros/chests/sulphur por zona deepwater em config/DeepwaterEngagementSuite/zone_stats.jsonl")]
     public ToggleNode CollectZoneStats { get; set; } = new ToggleNode(true);
 
@@ -151,6 +153,24 @@ public class PlannerSettings
     internal bool IsSearchRunning => SearchState == SearchState.Searching;
 
     internal SearchState SearchState = SearchState.Empty;
+}
+
+[Submenu(CollapsedByDefault = true)]
+public class PilotSettings
+{
+    [Menu("Show pilot panel", "Painel in-run com fase/comportamento da estrategia ativa")]
+    public ToggleNode ShowPilotPanel { get; set; } = new ToggleNode(true);
+
+    [Menu("Show objective arrow", "Linha do jogador ate o proximo objetivo priorizado")]
+    public ToggleNode ShowObjectiveArrow { get; set; } = new ToggleNode(true);
+
+    [Menu("Speedrun extract (min)", "Aviso de extracao no Speedrun")]
+    public RangeNode<int> SpeedrunExtractMinutes { get; set; } = new RangeNode<int>(15, 5, 60);
+
+    [Menu("Meatfish extract (min)", "Aviso de extracao no Meatfish")]
+    public RangeNode<int> MeatfishExtractMinutes { get; set; } = new RangeNode<int>(30, 10, 90);
+
+    public ColorNode ObjectiveColor { get; set; } = new ColorNode(Color.LightGreen);
 }
 
 [Submenu(CollapsedByDefault = true)]
