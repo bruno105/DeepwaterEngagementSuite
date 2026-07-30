@@ -475,9 +475,35 @@ public partial class DeepwaterEngagementSuite
         Array.Clear(_cellSulphurGain);
         Array.Clear(_cellChestsOpened);
         Array.Clear(_cellMonstersSeen);
-        var area = GameController.Area.CurrentArea;
-        _statsAreaName = area?.Name;
-        _statsAreaLevel = area?.RealLevel ?? 0;
+        try
+        {
+            var area = GameController.Area.CurrentArea;
+            _statsAreaName = area?.Name;
+            _statsAreaLevel = area?.RealLevel ?? 0;
+        }
+        catch
+        {
+            // em shutdown/hot-reload o GameController pode já estar indisponível
+            _statsAreaName = null;
+            _statsAreaLevel = 0;
+        }
+
         _statsAreaStart = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// Flush no unload: sem isto, fechar o HUD ou apertar Reload Plugins no meio de
+    /// uma zona perde o registro em andamento (só era gravado no próximo AreaChange).
+    /// </summary>
+    public override void OnClose()
+    {
+        FinalizeZoneStats();
+        base.OnClose();
+    }
+
+    public override void OnPluginDestroyForHotReload()
+    {
+        FinalizeZoneStats();
+        base.OnPluginDestroyForHotReload();
     }
 }
