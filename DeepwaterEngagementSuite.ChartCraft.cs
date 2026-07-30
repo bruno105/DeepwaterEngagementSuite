@@ -69,21 +69,10 @@ public partial class DeepwaterEngagementSuite
         var specialRoom = chart.Room?.Name is { } roomName && RoomBiomeOverride.ContainsKey(roomName);
         var keeper = specialRoom || keeperWeight >= Settings.VoyageSettings.KeeperWeightThreshold.Value;
 
-        var quant = 0;
-        var sulphur = 0;
-        foreach (var em in mods?.ExplicitMods ?? [])
-        {
-            var value = em.Values is { Count: > 0 } ? em.Values[0] : 0;
-            if (em.RawName.Contains("Quantity", StringComparison.OrdinalIgnoreCase))
-            {
-                quant += value;
-            }
-            else if (em.RawName.Contains("Resource", StringComparison.OrdinalIgnoreCase) ||
-                     em.RawName.Contains("Sulphur", StringComparison.OrdinalIgnoreCase))
-            {
-                sulphur += value;
-            }
-        }
+        // Quant/sulphur são propriedades COMPUTADAS (soma dos stats de todos os mods),
+        // não mods individuais — igual à linha "Item Quantity" do tooltip de maps.
+        var quant = SumStatValues(mods, "quantity");
+        var sulphur = SumStatValues(mods, "resource");
 
         var greenQuant = Settings.VoyageSettings.GreenQuantThreshold.Value;
         if (keeper && (quant >= greenQuant || sulphur >= 75))
@@ -102,5 +91,29 @@ public partial class DeepwaterEngagementSuite
         }
 
         return (Color.OrangeRed, null);
+    }
+
+    /// <summary>Soma os valores de stat cujo Key contenha o termo, em TODOS os mods do item.</summary>
+    private static int SumStatValues(Mods mods, string statKeySubstring)
+    {
+        var total = 0;
+        foreach (var mod in mods?.ItemMods ?? [])
+        {
+            var statNames = mod.ModRecord?.StatNames;
+            if (statNames == null)
+            {
+                continue;
+            }
+
+            for (var i = 0; i < statNames.Length && i < mod.Values.Count; i++)
+            {
+                if (statNames[i]?.Key?.Contains(statKeySubstring, StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    total += mod.Values[i];
+                }
+            }
+        }
+
+        return total;
     }
 }
