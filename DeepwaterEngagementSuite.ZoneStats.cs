@@ -71,6 +71,22 @@ public partial class DeepwaterEngagementSuite
         ("VaalRuins", "Lost Ruins"),
     ];
 
+    // Bioma autoritativo por sala especial (do DeepwaterRooms.dat): quando a sala é
+    // conhecida, vence o token de preload (que pode carregar assets de outros biomas).
+    private static readonly Dictionary<string, string> RoomBiomeOverride = new(StringComparer.Ordinal)
+    {
+        ["Sea Pillars"] = "CoralForest",
+        ["Pelagic Abyss"] = "CoralForest",
+        ["Eldritch Depths"] = "CoralForest",
+        ["Lost Ruins"] = "CoralForest",
+        ["Anchorfield"] = "Sandy",
+        ["Infested Bathyspheres"] = "Sandy",
+        ["Hazardous Depths"] = "Sandy",
+        ["Lost Shipment"] = "Sandy",
+        ["Runes of the Deep"] = "Sandy",
+        ["Kishara's Rest"] = "Sandy",
+    };
+
     private void ZoneStatsSniffPath(string path)
     {
         if (!Settings.CollectZoneStats || string.IsNullOrEmpty(path))
@@ -98,6 +114,11 @@ public partial class DeepwaterEngagementSuite
                 if (path.Contains(token, StringComparison.OrdinalIgnoreCase))
                 {
                     _statsRoom = room;
+                    if (RoomBiomeOverride.TryGetValue(room, out var authoritativeBiome))
+                    {
+                        _statsBiome = authoritativeBiome;
+                    }
+
                     break;
                 }
             }
