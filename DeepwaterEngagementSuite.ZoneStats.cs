@@ -158,7 +158,11 @@ public partial class DeepwaterEngagementSuite
                 sb.Append(string.Join(",", _statsChests.Select(kv => $"\"{kv.Key}\":{kv.Value}")));
                 sb.Append("},\"rewards\":{");
                 sb.Append(string.Join(",", _statsRewards.Select(kv => $"\"{kv.Key.Replace("\"", "")}\":{kv.Value}")));
-                sb.Append("}}");
+                sb.Append("},\"cellSeconds\":[");
+                sb.Append(string.Join(",", _cellSeconds.Select(s => ((int)s).ToString())));
+                sb.Append("],\"cellOrder\":[");
+                sb.Append(string.Join(",", _cellFirstOrder));
+                sb.Append("]}");
                 File.AppendAllText(Path.Combine(ConfigDirectory, "zone_stats.jsonl"), sb + Environment.NewLine);
             }
         }

@@ -144,6 +144,7 @@ public partial class DeepwaterEngagementSuite : BaseSettingsPlugin<DeepwaterEnga
     public override void AreaChange(AreaInstance area)
     {
         FinalizeZoneStats();
+        GridTrackReset();
         _pointerEntities.Clear();
         _plannerRunner?.Stop();
         _plannerRunner = null;
@@ -253,6 +254,7 @@ public partial class DeepwaterEngagementSuite : BaseSettingsPlugin<DeepwaterEnga
 
     public override Job Tick()
     {
+        GridTrackTick();
         if (Handler == null)
         {
             return null;
@@ -344,6 +346,11 @@ public partial class DeepwaterEngagementSuite : BaseSettingsPlugin<DeepwaterEnga
         DrawVoyageHighlights();
         var largePanelsOpen = GameController.IngameState.IngameUi.FullscreenPanels.Any(x => x.IsVisible) ||
                           GameController.IngameState.IngameUi.LargePanels.Any(x => x.IsVisible);
+
+        if (!largePanelsOpen)
+        {
+            DrawGridTracker();
+        }
 
         if (Handler == null)
         {

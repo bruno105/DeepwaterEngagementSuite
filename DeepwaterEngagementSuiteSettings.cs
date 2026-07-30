@@ -169,6 +169,15 @@ public class PilotSettings
     [Menu("Use Radar route", "Rota real por terreno andavel via Radar (PluginBridge); fallback em linha reta")]
     public ToggleNode UseRadarRoute { get; set; } = new ToggleNode(true);
 
+    [Menu("Show 3x3 grid tracker", "Grid 3x3 da area + trilha do personagem no mapa aberto")]
+    public ToggleNode ShowGridTracker { get; set; } = new ToggleNode(true);
+
+    [Menu("Grid debug mode", "Ativa o grid tracker em QUALQUER mapa - teste sem gastar voyage")]
+    public ToggleNode GridDebugMode { get; set; } = new ToggleNode(false);
+
+    public ColorNode GridColor { get; set; } = new ColorNode(Color.Cyan);
+    public ColorNode PathColor { get; set; } = new ColorNode(Color.Magenta);
+
     [Menu("Speedrun extract (min)", "Aviso de extracao no Speedrun")]
     public RangeNode<int> SpeedrunExtractMinutes { get; set; } = new RangeNode<int>(15, 5, 60);
 
