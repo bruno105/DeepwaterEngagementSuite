@@ -4,6 +4,8 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
+using ExileCore.PoEMemory;
 using ExileCore.PoEMemory.Components;
 using ExileCore.PoEMemory.MemoryObjects;
 using ExileCore.Shared.Enums;
@@ -76,7 +78,8 @@ public partial class DeepwaterEngagementSuite
             return;
         }
 
-        if (string.IsNullOrEmpty(_statsBiome))
+        if (string.IsNullOrEmpty(_statsBiome) &&
+            path.Contains("Deepwater", StringComparison.OrdinalIgnoreCase))
         {
             foreach (var (token, biome) in BiomePathTokens)
             {
@@ -103,10 +106,51 @@ public partial class DeepwaterEngagementSuite
         // Auto-diagnóstico: enquanto o bioma não resolve, amostra paths deepwater para
         // extrair novos tokens offline. Removível quando os tokens estabilizarem.
         if (string.IsNullOrEmpty(_statsBiome) && _statsPathSample.Count < 12 &&
-            path.Contains("Deepwater", StringComparison.Ordinal))
+            path.Contains("Deepwater", StringComparison.OrdinalIgnoreCase))
         {
             _statsPathSample.Add(path);
         }
+    }
+
+    // Entidades são genéricas (Metadata/Monsters/DeepwaterLeague/...); a identidade da
+    // sala está nos PRELOADS da área: tilesets/doodads carregam de pastas por bioma.
+    // Mesma técnica do PreloadAlert: arquivos com ChangeCount da área atual.
+    private bool _statsPreloadScanned;
+
+    private void ZoneStatsScanPreloads()
+    {
+        if (_statsPreloadScanned || !Settings.CollectZoneStats ||
+            (DateTime.UtcNow - _statsAreaStart).TotalSeconds < 3)
+        {
+            return;
+        }
+
+        _statsPreloadScanned = true;
+        Task.Run(() =>
+        {
+            try
+            {
+                var files = new FilesFromMemory(GameController.Memory).GetAllFilesSync();
+                var areaChangeCount = GameController.Game.AreaChangeCount;
+                foreach (var kv in files)
+                {
+                    if (kv.Value.ChangeCount != areaChangeCount)
+                    {
+                        continue;
+                    }
+
+                    ZoneStatsSniffPath(kv.Key);
+                    if (!string.IsNullOrEmpty(_statsBiome) && !string.IsNullOrEmpty(_statsRoom))
+                    {
+                        break;
+                    }
+                }
+            }
+            catch
+            {
+                // leitura de memória em transição de área; o retry é a próxima zona
+            }
+        });
     }
     // Drops no chão (chart runs não têm reward window): labels visíveis = o que o
     // loot filter do jogador considera relevante. Dedup por entidade.
@@ -271,6 +315,7 @@ public partial class DeepwaterEngagementSuite
             }
         }
 
+        ZoneStatsScanPreloads();
         ZoneStatsScanGroundLoot();
         ZoneStatsScanRewards();
     }
@@ -469,6 +514,7 @@ public partial class DeepwaterEngagementSuite
         _statsMapStatsAt = DateTime.MinValue;
         _statsBiomeAt = DateTime.MinValue;
         _statsRoom = null;
+        _statsPreloadScanned = false;
         _statsPathSample.Clear();
         _statsSeenDrops.Clear();
         _statsDrops.Clear();
