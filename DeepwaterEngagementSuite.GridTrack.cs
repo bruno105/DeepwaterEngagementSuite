@@ -86,9 +86,10 @@ public partial class DeepwaterEngagementSuite
             return -1;
         }
 
+        // Convenção do board da voyage: linha 0 = embaixo (Y maior), igual ao solver.
         var c = Math.Clamp((int)(gridPos.X * 3 / dims.X), 0, 2);
-        var r = Math.Clamp((int)(gridPos.Y * 3 / dims.Y), 0, 2);
-        return r * 3 + c;
+        var rowFromTop = Math.Clamp((int)(gridPos.Y * 3 / dims.Y), 0, 2);
+        return (2 - rowFromTop) * 3 + c;
     }
 
     private void GridTrackReset()
@@ -173,19 +174,20 @@ public partial class DeepwaterEngagementSuite
             drawList.AddLine(origin + new Vector2(0, y), origin + new Vector2(canvasW, y), gridCol, 1f);
         }
 
-        // Labels por célula: coordenada, ordem de entrada e tempo acumulado.
-        for (var r = 0; r < 3; r++)
+        // Labels por célula (convenção do board: (0,0) = canto inferior esquerdo).
+        for (var rowFromTop = 0; rowFromTop < 3; rowFromTop++)
         {
             for (var c = 0; c < 3; c++)
             {
-                var idx = r * 3 + c;
-                var label = $"({r},{c})";
+                var boardRow = 2 - rowFromTop;
+                var idx = boardRow * 3 + c;
+                var label = $"({boardRow},{c})";
                 if (_cellFirstOrder[idx] > 0)
                 {
                     label += $" #{_cellFirstOrder[idx]} {(int)(_cellSeconds[idx] / 60)}:{(int)(_cellSeconds[idx] % 60):D2}";
                 }
 
-                var labelPos = origin + new Vector2(canvasW * c / 3f + 3, canvasH * r / 3f + 3);
+                var labelPos = origin + new Vector2(canvasW * c / 3f + 3, canvasH * rowFromTop / 3f + 3);
                 drawList.AddText(labelPos, gridCol, label);
             }
         }
