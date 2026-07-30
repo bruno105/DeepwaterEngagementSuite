@@ -292,6 +292,15 @@ public partial class DeepwaterEngagementSuite : BaseSettingsPlugin<DeepwaterEnga
 
             if (entity.IsOpened || IsConsumedEncounter(entity))
             {
+                if (_cachedEntities.TryGetValue(entity.Id, out var openedItem))
+                {
+                    var cell = GridCellIndex(openedItem.GridPos);
+                    if (cell >= 0)
+                    {
+                        _cellChestsOpened[cell]++;
+                    }
+                }
+
                 _cachedEntities.Remove(entity.Id);
                 continue;
             }

@@ -555,6 +555,10 @@ public partial class DeepwaterEngagementSuite
                     _selectedSolutionIndex = 0;
                 var sol = _result.Solutions[_selectedSolutionIndex];
                 _voyagePlaceTask = PlacePieces(sol);
+                // Contexto do plano para o registro da voyage (previsto vs realizado).
+                _plannedStrategy = _activeStrategy?.Name ?? "Base";
+                _plannedScore = sol.TotalScore;
+                _plannedMults = ComputeEffectiveMultipliers(tree, _activeStrategy);
             }
         }
 

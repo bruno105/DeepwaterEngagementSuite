@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
 using ExileCore.PoEMemory.MemoryObjects;
 using ExileCore.Shared.Enums;
+using ExileCore.Shared.Helpers;
 
 namespace DeepwaterEngagementSuite;
 
@@ -25,6 +27,15 @@ public partial class DeepwaterEngagementSuite
     private readonly Dictionary<string, int> _statsChests = new();
     private Dictionary<string, int> _statsRewards = new();
     private DateTime _statsLastRewardScan = DateTime.MinValue;
+    // Atribuição de valor por célula do grid 3x3 (convenção do board, linha 0 embaixo).
+    private readonly int[] _cellSulphurGain = new int[9];
+    private readonly int[] _cellChestsOpened = new int[9];
+    private readonly int[] _cellMonstersSeen = new int[9];
+    private int? _statsSulphurPrev;
+    // Contexto do plano (setado no Place): previsto vs realizado por tile.
+    private double[,] _plannedMults;
+    private string _plannedStrategy;
+    private double _plannedScore;
 
     private void ZoneStatsOnMonsterAdded(Entity entity)
     {
@@ -40,6 +51,12 @@ public partial class DeepwaterEngagementSuite
 
         var rarity = entity.Rarity;
         _statsMonsters[rarity] = _statsMonsters.GetValueOrDefault(rarity) + 1;
+
+        var cell = GridCellIndex(entity.PosNum.WorldToGrid());
+        if (cell >= 0)
+        {
+            _cellMonstersSeen[cell]++;
+        }
     }
 
     private void ZoneStatsOnMarkerAdded(Entity entity)
@@ -76,6 +93,12 @@ public partial class DeepwaterEngagementSuite
             if (sulphur is > 0)
             {
                 _statsSulphurStart ??= sulphur;
+                if (_statsSulphurPrev is { } prev && sulphur > prev && _lastCellIndex >= 0)
+                {
+                    _cellSulphurGain[_lastCellIndex] += sulphur.Value - prev;
+                }
+
+                _statsSulphurPrev = sulphur;
                 _statsSulphurLast = sulphur;
                 _statsSulphurMax = Math.Max(_statsSulphurMax ?? 0, sulphur.Value);
             }
@@ -162,7 +185,30 @@ public partial class DeepwaterEngagementSuite
                 sb.Append(string.Join(",", _cellSeconds.Select(s => ((int)s).ToString())));
                 sb.Append("],\"cellOrder\":[");
                 sb.Append(string.Join(",", _cellFirstOrder));
-                sb.Append("]}");
+                sb.Append("],\"cellSulphur\":[");
+                sb.Append(string.Join(",", _cellSulphurGain));
+                sb.Append("],\"cellChests\":[");
+                sb.Append(string.Join(",", _cellChestsOpened));
+                sb.Append("],\"cellMonsters\":[");
+                sb.Append(string.Join(",", _cellMonstersSeen));
+                sb.Append(']');
+                if (_plannedMults != null)
+                {
+                    var mults = new List<string>();
+                    for (var r = 0; r < 3; r++)
+                    {
+                        for (var c = 0; c < 3; c++)
+                        {
+                            mults.Add(_plannedMults[r, c].ToString("F2", CultureInfo.InvariantCulture));
+                        }
+                    }
+
+                    sb.Append($",\"planned\":{{\"strategy\":\"{_plannedStrategy}\",");
+                    sb.Append($"\"score\":{_plannedScore.ToString("F1", CultureInfo.InvariantCulture)},");
+                    sb.Append($"\"mults\":[{string.Join(",", mults)}]}}");
+                }
+
+                sb.Append('}');
                 File.AppendAllText(Path.Combine(ConfigDirectory, "zone_stats.jsonl"), sb + Environment.NewLine);
             }
         }
@@ -179,6 +225,10 @@ public partial class DeepwaterEngagementSuite
         _statsSulphurStart = null;
         _statsSulphurLast = null;
         _statsSulphurMax = null;
+        _statsSulphurPrev = null;
+        Array.Clear(_cellSulphurGain);
+        Array.Clear(_cellChestsOpened);
+        Array.Clear(_cellMonstersSeen);
         var area = GameController.Area.CurrentArea;
         _statsAreaName = area?.Name;
         _statsAreaLevel = area?.RealLevel ?? 0;

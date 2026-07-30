@@ -169,6 +169,32 @@ public partial class DeepwaterEngagementSuite
             // Radar ausente ou textura ainda não gerada para a área
         }
 
+        // Heat do plano: células pintadas pela força do multiplicador do solve.
+        if (_plannedMults != null)
+        {
+            var maxMult = 0.01;
+            for (var r = 0; r < 3; r++)
+            {
+                for (var c = 0; c < 3; c++)
+                {
+                    maxMult = Math.Max(maxMult, _plannedMults[r, c]);
+                }
+            }
+
+            for (var rowFromTop = 0; rowFromTop < 3; rowFromTop++)
+            {
+                for (var c = 0; c < 3; c++)
+                {
+                    var boardRow = 2 - rowFromTop;
+                    var alpha = (float)(0.08 + 0.30 * _plannedMults[boardRow, c] / maxMult);
+                    var heatCol = ImGui.ColorConvertFloat4ToU32(new Vector4(0.1f, 0.9f, 0.2f, alpha));
+                    var cellMin = origin + new Vector2(canvasW * c / 3f, canvasH * rowFromTop / 3f);
+                    var cellMax = origin + new Vector2(canvasW * (c + 1) / 3f, canvasH * (rowFromTop + 1) / 3f);
+                    drawList.AddRectFilled(cellMin, cellMax, heatCol);
+                }
+            }
+        }
+
         // Grid 3x3 (bordas + linhas internas).
         for (var i = 0; i <= 3; i++)
         {

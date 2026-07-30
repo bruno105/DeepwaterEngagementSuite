@@ -298,6 +298,25 @@ public partial class DeepwaterEngagementSuite
         };
         ImGui.TextUnformatted(behavior);
 
+        var currentCell = GridCellIndex(_playerGridPos);
+        if (currentCell >= 0)
+        {
+            var cellText = $"Celula: ({currentCell / 3},{currentCell % 3})";
+            if (_plannedMults != null)
+            {
+                cellText += $"  mult x{_plannedMults[currentCell / 3, currentCell % 3]:F2}";
+            }
+
+            ImGui.TextUnformatted(cellText);
+        }
+
+        var maxLanterns = Handler?.MaxLanternCount ?? 0;
+        if (maxLanterns > 0 && PlacedLanternCount >= maxLanterns * 0.9)
+        {
+            ImGui.TextColored(Color.OrangeRed.ToImguiVec4(),
+                "Lanterns no fim - planeje o RETORNO (apagam em ordem reversa)");
+        }
+
         int? sulphur = null;
         try
         {
