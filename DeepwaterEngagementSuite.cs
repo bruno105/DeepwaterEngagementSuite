@@ -856,6 +856,7 @@ public partial class DeepwaterEngagementSuite : BaseSettingsPlugin<DeepwaterEnga
     {
         TrackPointerEntity(entity);
         ZoneStatsOnMonsterAdded(entity);
+        ZoneStatsSniffPath(entity.Path);
         if ((entity.Type is EntityType.Chest or EntityType.Terrain or EntityType.IngameIcon)
             && GetEntityType(entity.Path) != ExpeditionEntityType.None
             && !entity.IsOpened

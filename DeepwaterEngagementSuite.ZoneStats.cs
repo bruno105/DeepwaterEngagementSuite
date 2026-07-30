@@ -42,6 +42,72 @@ public partial class DeepwaterEngagementSuite
     private Dictionary<string, int> _statsMapStats;
     private DateTime _statsMapStatsAt = DateTime.MinValue;
     private DateTime _statsBiomeAt = DateTime.MinValue;
+    private string _statsRoom;
+    private readonly HashSet<string> _statsPathSample = new(StringComparer.Ordinal);
+
+    // Tokens de bioma/sala nos paths das entidades (chart runs rodam na área genérica
+    // DeepwaterEncounter; a identidade real está nos assets da sala).
+    private static readonly (string Token, string Biome)[] BiomePathTokens =
+    [
+        ("Sandy", "Sandy"),
+        ("CoralForest", "CoralForest"),
+        ("CoralReef", "CoralReef"),
+        ("ThermalVent", "ThermalVents"),
+    ];
+
+    private static readonly (string Token, string Room)[] RoomPathTokens =
+    [
+        ("StarfishPillar", "Sea Pillars"),
+        ("AnchorField", "Anchorfield"),
+        ("Bathyspheres", "Infested Bathyspheres"),
+        ("HazardBoat", "Hazardous Depths"),
+        ("LostShipment", "Lost Shipment"),
+        ("StoneCircle", "Runes of the Deep"),
+        ("CrashedShip", "Kishara's Rest"),
+        ("AbyssalPit", "Pelagic Abyss"),
+        ("EldritchHorrors", "Eldritch Depths"),
+        ("VaalRuins", "Lost Ruins"),
+    ];
+
+    private void ZoneStatsSniffPath(string path)
+    {
+        if (!Settings.CollectZoneStats || string.IsNullOrEmpty(path))
+        {
+            return;
+        }
+
+        if (string.IsNullOrEmpty(_statsBiome))
+        {
+            foreach (var (token, biome) in BiomePathTokens)
+            {
+                if (path.Contains(token, StringComparison.OrdinalIgnoreCase))
+                {
+                    _statsBiome = biome;
+                    break;
+                }
+            }
+        }
+
+        if (string.IsNullOrEmpty(_statsRoom))
+        {
+            foreach (var (token, room) in RoomPathTokens)
+            {
+                if (path.Contains(token, StringComparison.OrdinalIgnoreCase))
+                {
+                    _statsRoom = room;
+                    break;
+                }
+            }
+        }
+
+        // Auto-diagnóstico: enquanto o bioma não resolve, amostra paths deepwater para
+        // extrair novos tokens offline. Removível quando os tokens estabilizarem.
+        if (string.IsNullOrEmpty(_statsBiome) && _statsPathSample.Count < 12 &&
+            path.Contains("Deepwater", StringComparison.Ordinal))
+        {
+            _statsPathSample.Add(path);
+        }
+    }
     // Drops no chão (chart runs não têm reward window): labels visíveis = o que o
     // loot filter do jogador considera relevante. Dedup por entidade.
     private readonly HashSet<uint> _statsSeenDrops = new();
@@ -325,6 +391,13 @@ public partial class DeepwaterEngagementSuite
                 };
                 sb.Append($"\"kind\":\"{kind}\",");
                 sb.Append($"\"biome\":\"{(_statsBiome ?? "").Replace("\"", "")}\",");
+                sb.Append($"\"room\":\"{(_statsRoom ?? "").Replace("\"", "")}\",");
+                if (string.IsNullOrEmpty(_statsBiome) && _statsPathSample.Count > 0)
+                {
+                    sb.Append("\"pathSample\":[");
+                    sb.Append(string.Join(",", _statsPathSample.Select(p => $"\"{p.Replace("\"", "")}\"")));
+                    sb.Append("],");
+                }
                 sb.Append($"\"dims\":[{_statsDims.X},{_statsDims.Y}],");
                 sb.Append($"\"maxLanterns\":{_statsMaxLanterns},\"placedLanterns\":{_statsPlacedLanterns},");
                 sb.Append("\"mapStats\":{");
@@ -395,6 +468,8 @@ public partial class DeepwaterEngagementSuite
         _statsMapStats = null;
         _statsMapStatsAt = DateTime.MinValue;
         _statsBiomeAt = DateTime.MinValue;
+        _statsRoom = null;
+        _statsPathSample.Clear();
         _statsSeenDrops.Clear();
         _statsDrops.Clear();
         Array.Clear(_cellSulphurGain);
