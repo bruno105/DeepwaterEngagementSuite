@@ -18,6 +18,7 @@ public partial class DeepwaterEngagementSuite
     private DateTime _statsAreaStart;
     private int? _statsSulphurStart;
     private int? _statsSulphurLast;
+    private int? _statsSulphurMax;
     private readonly HashSet<uint> _statsSeenMonsters = new();
     private readonly HashSet<uint> _statsSeenChests = new();
     private readonly Dictionary<MonsterRarity, int> _statsMonsters = new();
@@ -63,9 +64,9 @@ public partial class DeepwaterEngagementSuite
         // AreaChange (que normalmente inicializa a identidade da zona) não disparou.
         if (string.IsNullOrEmpty(_statsAreaName))
         {
-            var area = GameController.IngameState.Data.CurrentArea;
+            var area = GameController.Area.CurrentArea;
             _statsAreaName = area?.Name;
-            _statsAreaLevel = area?.AreaLevel ?? 0;
+            _statsAreaLevel = area?.RealLevel ?? 0;
             _statsAreaStart = DateTime.UtcNow;
         }
 
@@ -76,6 +77,7 @@ public partial class DeepwaterEngagementSuite
             {
                 _statsSulphurStart ??= sulphur;
                 _statsSulphurLast = sulphur;
+                _statsSulphurMax = Math.Max(_statsSulphurMax ?? 0, sulphur.Value);
             }
         }
         catch
@@ -118,8 +120,9 @@ public partial class DeepwaterEngagementSuite
                 }
             }
 
-            // Última foto da janela vence — é o conteúdo real enviado à superfície.
-            if (snapshot.Count > 0)
+            // Guarda o MELHOR snapshot (maior total): conforme o jogador saqueia a
+            // janela, os snapshots encolhem — o último seria só a sobra.
+            if (snapshot.Count > 0 && snapshot.Values.Sum() > _statsRewards.Values.Sum())
             {
                 _statsRewards = snapshot;
             }
@@ -134,9 +137,11 @@ public partial class DeepwaterEngagementSuite
     {
         try
         {
-            // Só grava zonas onde apareceu conteúdo deepwater (marker ou rewards).
-            if (Settings.CollectZoneStats && (_statsChests.Count > 0 || _statsRewards.Count > 0) &&
-                !string.IsNullOrEmpty(_statsAreaName))
+            // Só grava zonas com conteúdo deepwater de verdade: um marker além de
+            // "OtherChests" (o chest de Lost Chart em mapas normais é só ruído) ou rewards.
+            var hasDeepwaterContent =
+                _statsChests.Keys.Any(k => k != "OtherChests") || _statsRewards.Count > 0;
+            if (Settings.CollectZoneStats && hasDeepwaterContent && !string.IsNullOrEmpty(_statsAreaName))
             {
                 var sb = new StringBuilder(512);
                 sb.Append('{');
@@ -146,6 +151,7 @@ public partial class DeepwaterEngagementSuite
                 sb.Append($"\"durationSec\":{(int)(DateTime.UtcNow - _statsAreaStart).TotalSeconds},");
                 sb.Append($"\"sulphurStart\":{_statsSulphurStart?.ToString() ?? "null"},");
                 sb.Append($"\"sulphurEnd\":{_statsSulphurLast?.ToString() ?? "null"},");
+                sb.Append($"\"sulphurMax\":{_statsSulphurMax?.ToString() ?? "null"},");
                 sb.Append("\"monsters\":{");
                 sb.Append(string.Join(",", _statsMonsters.Select(kv => $"\"{kv.Key}\":{kv.Value}")));
                 sb.Append("},\"chests\":{");
@@ -168,9 +174,10 @@ public partial class DeepwaterEngagementSuite
         _statsRewards = new Dictionary<string, int>();
         _statsSulphurStart = null;
         _statsSulphurLast = null;
-        var area = GameController.IngameState.Data.CurrentArea;
+        _statsSulphurMax = null;
+        var area = GameController.Area.CurrentArea;
         _statsAreaName = area?.Name;
-        _statsAreaLevel = area?.AreaLevel ?? 0;
+        _statsAreaLevel = area?.RealLevel ?? 0;
         _statsAreaStart = DateTime.UtcNow;
     }
 }
