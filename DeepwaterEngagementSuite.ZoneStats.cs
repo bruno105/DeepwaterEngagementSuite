@@ -466,6 +466,9 @@ public partial class DeepwaterEngagementSuite
                 }
                 sb.Append($"\"dims\":[{_statsDims.X},{_statsDims.Y}],");
                 sb.Append($"\"maxLanterns\":{_statsMaxLanterns},\"placedLanterns\":{_statsPlacedLanterns},");
+                // Proveniência da região do grid: células só são confiáveis com "terrain".
+                sb.Append($"\"regionSource\":\"{(_regionComputed ? "terrain" : "fallback")}\",");
+                sb.Append($"\"region\":[{(int)_gridOrigin.X},{(int)_gridOrigin.Y},{(int)_gridSize.X},{(int)_gridSize.Y}],");
                 sb.Append("\"mapStats\":{");
                 sb.Append(string.Join(",",
                     (_statsMapStats ?? new Dictionary<string, int>()).Select(kv => $"\"{kv.Key}\":{kv.Value}")));

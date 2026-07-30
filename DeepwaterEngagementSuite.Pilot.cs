@@ -174,6 +174,38 @@ public partial class DeepwaterEngagementSuite
             }
         }
 
+        // Tiles do PLANO ainda não visitados viram objetivos: o de maior multiplicador
+        // puxa a rota — evita deixar o tile jackpot para o fim (e não alcançá-lo).
+        if (_plannedMults != null && _regionComputed)
+        {
+            var maxPlanned = 0.01;
+            for (var r = 0; r < 3; r++)
+            {
+                for (var c = 0; c < 3; c++)
+                {
+                    maxPlanned = Math.Max(maxPlanned, _plannedMults[r, c]);
+                }
+            }
+
+            for (var r = 0; r < 3; r++)
+            {
+                for (var c = 0; c < 3; c++)
+                {
+                    var idx = r * 3 + c;
+                    if (_cellFirstOrder[idx] > 0)
+                    {
+                        continue; // já visitado
+                    }
+
+                    var center = new Vector2(
+                        _gridOrigin.X + (c + 0.5f) / 3f * _gridSize.X,
+                        _gridOrigin.Y + (r + 0.5f) / 3f * _gridSize.Y);
+                    var prio = 40 + (int)(60 * _plannedMults[r, c] / maxPlanned);
+                    objectives.Add(($"Tile ({r},{c}) x{_plannedMults[r, c]:F1}", center, prio));
+                }
+            }
+        }
+
         var lanternsLeft = kindCounts.GetValueOrDefault("LanternReplenishEncounter");
         var meatfishKillPhase = strategyName == "Meatfish" && lanternsLeft == 0;
         if (strategyName == "DivineBorder" || meatfishKillPhase)
