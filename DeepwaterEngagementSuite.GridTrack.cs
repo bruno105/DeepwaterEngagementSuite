@@ -86,10 +86,11 @@ public partial class DeepwaterEngagementSuite
             return -1;
         }
 
-        // Convenção do board da voyage: linha 0 = embaixo (Y maior), igual ao solver.
+        // Convenção do board da voyage: linha 0 = embaixo do canvas. Com o Y do mundo
+        // crescendo para o norte (flip no canvas), gridY baixo = embaixo = linha 0.
         var c = Math.Clamp((int)(gridPos.X * 3 / dims.X), 0, 2);
-        var rowFromTop = Math.Clamp((int)(gridPos.Y * 3 / dims.Y), 0, 2);
-        return (2 - rowFromTop) * 3 + c;
+        var row = Math.Clamp((int)(gridPos.Y * 3 / dims.Y), 0, 2);
+        return row * 3 + c;
     }
 
     private void GridTrackReset()
@@ -139,8 +140,9 @@ public partial class DeepwaterEngagementSuite
         var origin = ImGui.GetCursorScreenPos();
         var drawList = ImGui.GetWindowDrawList();
 
+        // Y do mundo cresce para o norte: canvas desenha gridY alto no TOPO (flip).
         Vector2 ToCanvas(Vector2 grid) =>
-            origin + new Vector2(grid.X / dims.X * canvasW, grid.Y / dims.Y * canvasH);
+            origin + new Vector2(grid.X / dims.X * canvasW, (1f - grid.Y / dims.Y) * canvasH);
 
         var gridCol = ImGui.ColorConvertFloat4ToU32(settings.GridColor.Value.ToImguiVec4());
         var pathCol = ImGui.ColorConvertFloat4ToU32(settings.PathColor.Value.ToImguiVec4());
@@ -156,8 +158,10 @@ public partial class DeepwaterEngagementSuite
         {
             if (Graphics.HasImage("radar_minimap"))
             {
+                // UV com V invertido para acompanhar o flip do eixo Y do canvas.
                 drawList.AddImage(Graphics.GetTextureId("radar_minimap"),
-                    origin, origin + new Vector2(canvasW, canvasH));
+                    origin, origin + new Vector2(canvasW, canvasH),
+                    new Vector2(0, 1), new Vector2(1, 0));
             }
         }
         catch
