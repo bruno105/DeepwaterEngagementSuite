@@ -34,7 +34,11 @@ public record VoyageStrategy(
                 new StrategyBoost(["Strongboxes", "ArcanistBox"], 1.5),
             ],
             [new StrategyBoost(["RareMonsterDivine"], 2.0)],
-            []),
+            [],
+            [
+                new PieceRequirement("1x Operative/Diviner/Bottle", 1, ["OperativeBox", "DivinerBox", "LostMessage"]),
+            ],
+            "Milky: UM box no CENTRO | quant 110%+ ANTES de rodar | maiores quants nas laterais | levar Alch/Scour/Ex p/ juicar boxes"),
         // Regex do doc: "cannot|poss|lantern|pantheon" — juice máximo, coleta de lanterns.
         // Composição do Milky: 2× Starfish, 1× Pantheon (ou 4k Wisps), 2× Sea Pillars,
         // 2× Golden Lanterns, 1× Possessed, 1× No-Equipment (fallback Rares Fracture).
@@ -55,6 +59,8 @@ public record VoyageStrategy(
             ],
             "Layout Milky: Starfish topo/baixo-meio | Pantheon dir-meio | GL centro | Pillars cantos"),
         // Regex do doc: "rare monsters in all voy|strongbox" — só compensa com o border de Divine rolado.
+        // Milky: Sea-Pillar NO tile do Divine + feeders de "+5 Strongboxes" (7 rares/box =
+        // 7 div/box; um chart +5 ~ 35 div). Variante cutedog: Pelagic Abyss pack-size alto.
         new("DivineBorder",
             [
                 new StrategyBoost(["IncreasedRareMonsters", "Strongboxes"], 2.5),
@@ -64,7 +70,13 @@ public record VoyageStrategy(
                 new StrategyBoost(["RareMonsterDivine"], 3.0),
                 new StrategyBoost(["IncreasedRareMonsters", "RareMonstersPerConnection"], 2.0),
             ],
-            ["RareMonsterDivine"]),
+            ["RareMonsterDivine"],
+            [
+                new PieceRequirement("1x Sea-Pillar/Pelagic", 1, ["Room:Sea Pillars", "Room:Pelagic Abyss"]),
+                new PieceRequirement("3x Starfish/Strongbox", 3, ["Starfish", "Strongboxes", "OperativeBox", "DivinerBox", "ArcanistBox"]),
+                new PieceRequirement("5x Increased Rares", 5, ["IncreasedRareMonsters"]),
+            ],
+            "Milky: Pillar/Pelagic NO tile do Divine | +5 Strongboxes adjacentes (rolar boxes p/ Stream of Monsters/of Rarity = 7 div/box)"),
     ];
 
     public double BoostChartWeight(string modName, double weight)

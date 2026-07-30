@@ -353,6 +353,7 @@ public partial class DeepwaterEngagementSuite : BaseSettingsPlugin<DeepwaterEnga
     public override void Render()
     {
         DrawVoyageHighlights();
+        DrawInventoryChartHighlights();
         var largePanelsOpen = GameController.IngameState.IngameUi.FullscreenPanels.Any(x => x.IsVisible) ||
                           GameController.IngameState.IngameUi.LargePanels.Any(x => x.IsVisible);
 

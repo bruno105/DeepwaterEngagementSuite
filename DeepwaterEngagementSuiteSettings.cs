@@ -317,6 +317,15 @@ public class VoyageSettings
     [Menu("Show chart values", "Mostra o valor calculado de cada chart do estoque e marca os que entram no solve")]
     public ToggleNode ShowChartValues { get; set; } = new ToggleNode(true);
 
+    [Menu("Highlight inventory charts", "Semaforo verde/amarelo/vermelho nos charts do inventario (craft manual)")]
+    public ToggleNode HighlightInventoryCharts { get; set; } = new ToggleNode(true);
+
+    [Menu("Keeper weight threshold", "Peso minimo do implicit para o chart ser keeper (verde/amarelo)")]
+    public RangeNode<int> KeeperWeightThreshold { get; set; } = new RangeNode<int>(40, 0, 100);
+
+    [Menu("Green quant threshold", "Quant minima para keeper ficar verde (Milky: 110%+ antes de rodar)")]
+    public RangeNode<int> GreenQuantThreshold { get; set; } = new RangeNode<int>(110, 0, 200);
+
     [Menu("Reroll keep threshold", "R = melhor score atual / score com borders medios. Abaixo disso o advisor recomenda reroll.")]
     public RangeNode<float> RerollKeepThreshold { get; set; } = new RangeNode<float>(1.0f, 0f, 3f);
 
