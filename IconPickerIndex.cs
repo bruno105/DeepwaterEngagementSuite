@@ -24,4 +24,5 @@ public enum IconPickerIndex
     AltarOctopus,
     TormentedSpiritEncounter,
     LanternReplenishEncounter,
+    GoldenLantern,
 }

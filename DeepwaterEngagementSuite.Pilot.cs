@@ -1,10 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using ExileCore.PoEMemory.Components;
 using ExileCore.PoEMemory.MemoryObjects;
 using ExileCore.Shared.Enums;
 using ExileCore.Shared.Helpers;
+using GameOffsets.Native;
 using ImGuiNET;
 using SharpDX;
 using Vector2 = System.Numerics.Vector2;
@@ -15,8 +18,19 @@ public partial class DeepwaterEngagementSuite
 {
     // "Voyage Pilot": painel in-run com o comportamento da estratégia ativa + seta para
     // o próximo objetivo. Prioridades por tipo de marker, com overrides por estratégia.
+    // Objetivos que dão valor para o RESTO do run (buffs/recursos): a ordem importa —
+    // pegá-los cedo multiplica tudo que vem depois, então a prioridade decai com o tempo.
+    private static readonly HashSet<string> PilotBuffKinds =
+        ["GoldenLantern", "LanternReplenishEncounter", "AltarCrab", "AltarOctopus"];
+
+    private List<Vector2i> _pilotRoute;
+    private Vector2 _pilotRouteTarget;
+    private CancellationTokenSource _pilotRouteCts;
+    private DateTime _lastRouteRequest = DateTime.MinValue;
+
     private static readonly Dictionary<string, int> PilotBasePriority = new()
     {
+        ["GoldenLantern"] = 96,
         ["Unrevealed"] = 80,
         ["CurrencyTreasureChest"] = 70,
         ["BottledItemChest"] = 70,
@@ -50,11 +64,13 @@ public partial class DeepwaterEngagementSuite
         },
         ["Meatfish"] = new Dictionary<string, int>
         {
+            ["GoldenLantern"] = 110,
             ["LanternReplenishEncounter"] = 100,
             ["AllflameEmbersChest"] = 70,
         },
         ["DivineBorder"] = new Dictionary<string, int>
         {
+            ["GoldenLantern"] = 70,
             ["Unrevealed"] = 50,
         },
     };
@@ -104,10 +120,19 @@ public partial class DeepwaterEngagementSuite
         }
 
         var overrides = PilotStrategyOverrides.GetValueOrDefault(strategyName);
+        var elapsed = DateTime.UtcNow - _statsAreaStart;
+        // Decaimento dos objetivos de buff: valor cheio no início, piso de 35% aos 13+ min.
+        var buffDecay = Math.Max(0.35, 1.0 - elapsed.TotalMinutes / 20.0);
 
         int Priority(string kind) =>
             overrides?.GetValueOrDefault(kind, PilotBasePriority.GetValueOrDefault(kind, 10))
             ?? PilotBasePriority.GetValueOrDefault(kind, 10);
+
+        int EffectivePriority(string kind)
+        {
+            var prio = Priority(kind);
+            return PilotBuffKinds.Contains(kind) ? (int)(prio * buffDecay) : prio;
+        }
 
         // Objetivos: markers conhecidos (não abertos), alvos unrevealed e (fase de kill) rares vivos.
         var objectives = new List<(string Label, Vector2 Pos, int Prio)>();
@@ -116,7 +141,7 @@ public partial class DeepwaterEngagementSuite
         {
             var kind = GetChestType(cached.Path).ToString();
             kindCounts[kind] = kindCounts.GetValueOrDefault(kind) + 1;
-            objectives.Add((kind, cached.GridPos, Priority(kind)));
+            objectives.Add((kind, cached.GridPos, EffectivePriority(kind)));
         }
 
         var seenTargets = new HashSet<(int, int)>();
@@ -168,24 +193,80 @@ public partial class DeepwaterEngagementSuite
             .Cast<(string Label, Vector2 Pos, int Prio)?>()
             .FirstOrDefault();
 
-        // Seta para o próximo objetivo (mundo + mapa).
+        // Seta/rota para o próximo objetivo (mundo + mapa). Com o Radar instalado, a
+        // rota segue o terreno andável (Radar.LookForRoute via PluginBridge).
         if (settings.ShowObjectiveArrow && next is { } obj)
         {
             var color = settings.ObjectiveColor.Value;
-            var playerScreen = GetWorldScreenPosition(_playerGridPos);
             var targetScreen = GetWorldScreenPosition(obj.Pos);
-            if (IsRoughlyOnScreen(playerScreen) || IsRoughlyOnScreen(targetScreen))
+
+            if (settings.UseRadarRoute.Value &&
+                Vector2.Distance(_pilotRouteTarget, obj.Pos) >= 40 &&
+                (DateTime.UtcNow - _lastRouteRequest).TotalSeconds >= 1)
             {
-                Graphics.DrawLine(playerScreen, targetScreen, 3, color);
+                _lastRouteRequest = DateTime.UtcNow;
+                var lookForRoute = GameController.PluginBridge
+                    .GetMethod<Func<Vector2, Action<List<Vector2i>>, CancellationToken, Task>>("Radar.LookForRoute");
+                if (lookForRoute != null)
+                {
+                    _pilotRouteCts?.Cancel();
+                    _pilotRouteCts = new CancellationTokenSource();
+                    _pilotRouteTarget = obj.Pos;
+                    _pilotRoute = null;
+                    try
+                    {
+                        lookForRoute(obj.Pos, route => _pilotRoute = route, _pilotRouteCts.Token);
+                    }
+                    catch
+                    {
+                        // Radar pode não ter pathfinding pronto ainda
+                    }
+                }
+            }
+
+            var route = _pilotRoute;
+            var routeValid = settings.UseRadarRoute.Value && route is { Count: > 1 } &&
+                             Vector2.Distance(_pilotRouteTarget, obj.Pos) < 40;
+            if (routeValid)
+            {
+                var step = Math.Max(1, route.Count / 80);
+                for (var i = step; i < route.Count; i += step)
+                {
+                    var a = new Vector2(route[i - step].X, route[i - step].Y);
+                    var b = new Vector2(route[i].X, route[i].Y);
+                    if (_largeMapOpen)
+                    {
+                        Graphics.DrawLine(Graphics.GridToMap(a, _playerGridPos),
+                            Graphics.GridToMap(b, _playerGridPos), 2, color);
+                    }
+
+                    // No mundo, só o trecho próximo ao jogador (custo de terrain height).
+                    if (Vector2.Distance(_playerGridPos, a) <= 150 || Vector2.Distance(_playerGridPos, b) <= 150)
+                    {
+                        Graphics.DrawLine(GetWorldScreenPosition(a), GetWorldScreenPosition(b), 3, color);
+                    }
+                }
+            }
+            else
+            {
+                var playerScreen = GetWorldScreenPosition(_playerGridPos);
+                if (IsRoughlyOnScreen(playerScreen) || IsRoughlyOnScreen(targetScreen))
+                {
+                    Graphics.DrawLine(playerScreen, targetScreen, 3, color);
+                }
+
+                if (_largeMapOpen)
+                {
+                    Graphics.DrawLine(Graphics.GridToMap(_playerGridPos, _playerGridPos),
+                        Graphics.GridToMap(obj.Pos, _playerGridPos), 2, color);
+                }
+            }
+
+            if (IsRoughlyOnScreen(targetScreen))
+            {
                 Graphics.DrawTextWithBackground(
                     $"> {obj.Label} ({Vector2.Distance(_playerGridPos, obj.Pos):F0})",
                     targetScreen + new Vector2(0, -18), color, Color.Black);
-            }
-
-            if (_largeMapOpen)
-            {
-                Graphics.DrawLine(Graphics.GridToMap(_playerGridPos, _playerGridPos),
-                    Graphics.GridToMap(obj.Pos, _playerGridPos), 2, color);
             }
         }
 
@@ -196,7 +277,6 @@ public partial class DeepwaterEngagementSuite
             return;
         }
 
-        var elapsed = DateTime.UtcNow - _statsAreaStart;
         var extractLimit = strategyName switch
         {
             "Speedrun" => settings.SpeedrunExtractMinutes.Value,

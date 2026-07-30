@@ -39,6 +39,7 @@ public class DeepwaterEngagementSuiteSettings : ISettings
     public const MapIconsIndex DefaultTormentedSpiritEncounterIcon = MapIconsIndex.LootFilterSmallGreenCircle;
     // DeepwaterLantern is blank in Icons.png; BlightPortalFire is a visible fire-style stand-in.
     public const MapIconsIndex DefaultLanternReplenishEncounterIcon = MapIconsIndex.BlightPortalFire;
+    public const MapIconsIndex DefaultGoldenLanternIcon = MapIconsIndex.LootFilterLargeYellowCircle;
 
     public Dictionary<IconPickerIndex, IconDisplaySettings> IconMapping = new();
 
@@ -79,6 +80,7 @@ public class DeepwaterEngagementSuiteSettings : ISettings
         IconPickerIndex.AltarOctopus => DefaultAltarOctopusIcon,
         IconPickerIndex.TormentedSpiritEncounter => DefaultTormentedSpiritEncounterIcon,
         IconPickerIndex.LanternReplenishEncounter => DefaultLanternReplenishEncounterIcon,
+        IconPickerIndex.GoldenLantern => DefaultGoldenLanternIcon,
         _ => DefaultOtherChestIcon,
     };
 
@@ -163,6 +165,9 @@ public class PilotSettings
 
     [Menu("Show objective arrow", "Linha do jogador ate o proximo objetivo priorizado")]
     public ToggleNode ShowObjectiveArrow { get; set; } = new ToggleNode(true);
+
+    [Menu("Use Radar route", "Rota real por terreno andavel via Radar (PluginBridge); fallback em linha reta")]
+    public ToggleNode UseRadarRoute { get; set; } = new ToggleNode(true);
 
     [Menu("Speedrun extract (min)", "Aviso de extracao no Speedrun")]
     public RangeNode<int> SpeedrunExtractMinutes { get; set; } = new RangeNode<int>(15, 5, 60);

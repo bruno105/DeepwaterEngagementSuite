@@ -158,6 +158,9 @@ public partial class DeepwaterEngagementSuite : BaseSettingsPlugin<DeepwaterEnga
         _shapeCache.Clear();
         _rerollCount = 0;
         _lastBorderKey = null;
+        _pilotRoute = null;
+        _pilotRouteTarget = default;
+        _pilotRouteCts?.Cancel();
     }
 
     private ExpeditionEntityType GetEntityType(string path)
@@ -171,6 +174,7 @@ public partial class DeepwaterEngagementSuite : BaseSettingsPlugin<DeepwaterEnga
             var a when a.StartsWith("Metadata/Terrain/Leagues/Deepwater/Objects/DeepwaterTormentedSpiritEncounter", StringComparison.Ordinal) => ExpeditionEntityType.Marker,
             var a when a.StartsWith("Metadata/Terrain/Leagues/Deepwater/Objects/DeepwaterCursedDucatDrop", StringComparison.Ordinal) => ExpeditionEntityType.Marker,
             var a when a.StartsWith("Metadata/Terrain/Leagues/Deepwater/Objects/DeepwaterLanternReplenishEncounter", StringComparison.Ordinal) => ExpeditionEntityType.Marker,
+            var a when a.Contains("Deepwater", StringComparison.Ordinal) && a.Contains("GoldenLantern", StringComparison.Ordinal) => ExpeditionEntityType.Marker,
             _ => ExpeditionEntityType.None,
         });
     }
@@ -194,6 +198,7 @@ public partial class DeepwaterEngagementSuite : BaseSettingsPlugin<DeepwaterEnga
         var p when p.Contains("DeepwaterAltarOctopus", StringComparison.Ordinal) => IconPickerIndex.AltarOctopus,
         var p when p.Contains("DeepwaterTormentedSpiritEncounter", StringComparison.Ordinal) => IconPickerIndex.TormentedSpiritEncounter,
         var p when p.Contains("DeepwaterLanternReplenishEncounter", StringComparison.Ordinal) => IconPickerIndex.LanternReplenishEncounter,
+        var p when p.Contains("GoldenLantern", StringComparison.Ordinal) => IconPickerIndex.GoldenLantern,
         _ => IconPickerIndex.OtherChests,
     };
 
