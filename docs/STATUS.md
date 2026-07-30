@@ -9,9 +9,13 @@
   Escopos Adjacent/Voyage/Self; bioma+explicits no valor próprio; PositionWeights por
   profile (tela: linha 0 = topo; solver: row 0 = baixo — spawn (0,0) bottom-left).
 - **Solver**: primeira solução via ordem por conexões; pool cap top-K (SolverMaxCharts=24).
-- **Estratégias** (VoyageStrategy.DocStrategies): Speedrun/Meatfish/DivineBorder com
-  boosts por substring, gate de border (Divine), requisitos de peças (FALTAM no painel),
-  layout hints do Milky; seletor Auto/manual/Base; Solve e advisor usam a ativa.
+- **Estratégias** (VoyageStrategy.DocStrategies): as 6 do site one-more-map, pesos
+  verificados contra o bundle 2026-07-30 — Speedrun/Meatfish/DivineBorder/DivineBoxes
+  (cutedog)/Ethereal (⚠ deprecado)/AlcGo (refugo, sem requisitos) — boosts por
+  substring, gates de border, requisitos de peças (FALTAM no painel), layout hints;
+  seletor Auto/manual/Base dinâmico. Stats rolados (quant/6, sulphur/8, pack/8) viram
+  pseudo-mods Self ("Stat:*") no BuildMapPiece — craft conta no valor próprio.
+  Posicionais (pins/centro/laterais) e reserva entre estratégias: integração upstream.
 - **Reroll advisor**: R = Σ borders efetivos / baseline médio, pré-solve, por frame;
   custo 3000×2^n; sulphur-aware; contador com reset em AreaChange.
 - **Voyage Pilot**: fase/comportamento por estratégia, decay temporal de buffs, célula

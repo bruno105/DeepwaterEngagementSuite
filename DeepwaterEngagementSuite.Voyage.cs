@@ -35,7 +35,8 @@ public partial class DeepwaterEngagementSuite
     private VoyageStrategy _activeStrategy;
     private Task _run;
 
-    private static readonly string[] StrategyChoices = ["Auto", "Speedrun", "Meatfish", "DivineBorder", "Base"];
+    private static readonly string[] StrategyChoices =
+        ["Auto", .. VoyageStrategy.DocStrategies.Select(s => s.Name), "Base"];
     private SyncTask<bool> _voyagePlaceTask;
     private VoyagePlanner _voyagePlanner;
     private int _selectedSolutionIndex = 0;
@@ -357,6 +358,28 @@ public partial class DeepwaterEngagementSuite
 
         AddItemMods(itemMods?.ImplicitMods, ModScope.Adjacent);
         AddItemMods(itemMods?.ExplicitMods, ModScope.Self);
+
+        // Stats rolados (quant/sulphur/pack) como pseudo-mods Self — explicits fora da
+        // config entram com peso 0, então o craft não contava no valor próprio. Escala
+        // per-N do solver one-more-map (quantity/6, sulphur/8, packsize/8); alvo dos
+        // boosts self:* das estratégias (Speedrun quant 110%+, Pelagic pack alto...).
+        var quantStat = SumStatValues(itemMods, "quantity");
+        if (quantStat != 0)
+        {
+            modifiers.Add(new Modifier("Stat:Quantity", quantStat / 6.0, ModScope.Self));
+        }
+
+        var sulphurStat = SumStatValues(itemMods, "resource");
+        if (sulphurStat != 0)
+        {
+            modifiers.Add(new Modifier("Stat:Resource", sulphurStat / 8.0, ModScope.Self));
+        }
+
+        var packStat = SumStatValues(itemMods, "pack");
+        if (packStat != 0)
+        {
+            modifiers.Add(new Modifier("Stat:PackSize", packStat / 8.0, ModScope.Self));
+        }
 
         // Nome da sala como pseudo-mod (peso 0): identifica charts especiais no pool
         // (Sea Pillars, Kishara's Rest...) para requisitos de estratégia e pesos futuros.
