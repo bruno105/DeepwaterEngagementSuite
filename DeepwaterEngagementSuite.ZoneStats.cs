@@ -32,6 +32,14 @@ public partial class DeepwaterEngagementSuite
     private readonly int[] _cellChestsOpened = new int[9];
     private readonly int[] _cellMonstersSeen = new int[9];
     private int? _statsSulphurPrev;
+    // Identidade do run: bioma (via WorldArea match no .dat), dimensões da sala,
+    // lanterns (7 = chart solo, ~69 = voyage) e os stats ativos da área (mods do chart).
+    private string _statsBiome;
+    private GameOffsets.Native.Vector2i _statsDims;
+    private int _statsMaxLanterns;
+    private int _statsPlacedLanterns;
+    private Dictionary<string, int> _statsMapStats;
+    private DateTime _statsMapStatsAt = DateTime.MinValue;
     // Contexto do plano (setado no Place): previsto vs realizado por tile.
     private double[,] _plannedMults;
     private string _plannedStrategy;
@@ -108,6 +116,86 @@ public partial class DeepwaterEngagementSuite
             // handler ilegível fora de contexto deepwater
         }
 
+        try
+        {
+            var max = Handler?.MaxLanternCount ?? 0;
+            if (max > 0)
+            {
+                _statsMaxLanterns = max;
+                _statsPlacedLanterns = Handler.PlacedLanternCount;
+            }
+        }
+        catch
+        {
+            // handler ilegível
+        }
+
+        if (_statsDims == default)
+        {
+            try
+            {
+                _statsDims = GameController.IngameState.Data.AreaDimensions;
+            }
+            catch
+            {
+                // dimensões ainda não carregadas
+            }
+        }
+
+        if (_statsBiome == null)
+        {
+            try
+            {
+                var worldArea = GameController.Area.CurrentArea?.Area;
+                if (worldArea != null)
+                {
+                    var biome = GameController.Files.DeepwaterBiomes.EntriesList
+                        .FirstOrDefault(b => b.WorldArea?.Address == worldArea.Address);
+                    _statsBiome = biome?.Id ?? "";
+                }
+            }
+            catch
+            {
+                _statsBiome = "";
+            }
+        }
+
+        if ((DateTime.UtcNow - _statsMapStatsAt).TotalSeconds >= 2)
+        {
+            _statsMapStatsAt = DateTime.UtcNow;
+            try
+            {
+                var stats = GameController.IngameState.Data.MapStats;
+                if (stats is { Count: > 0 })
+                {
+                    var filtered = new Dictionary<string, int>();
+                    foreach (var kv in stats)
+                    {
+                        if (kv.Value == 0)
+                        {
+                            continue;
+                        }
+
+                        var name = kv.Key.ToString();
+                        if (name.Contains("Deepwater", StringComparison.OrdinalIgnoreCase) ||
+                            name is "MapItemDropQuantityPct" or "MapItemDropRarityPct" or "MapPackSizePct")
+                        {
+                            filtered[name] = kv.Value;
+                        }
+                    }
+
+                    if (filtered.Count >= (_statsMapStats?.Count ?? 0))
+                    {
+                        _statsMapStats = filtered;
+                    }
+                }
+            }
+            catch
+            {
+                // stats da área ilegíveis em transição
+            }
+        }
+
         ZoneStatsScanRewards();
     }
 
@@ -171,6 +259,20 @@ public partial class DeepwaterEngagementSuite
                 sb.Append($"\"time\":\"{_statsAreaStart:O}\",");
                 sb.Append($"\"area\":\"{_statsAreaName.Replace("\"", "")}\",");
                 sb.Append($"\"level\":{_statsAreaLevel},");
+                var kind = _statsMaxLanterns switch
+                {
+                    <= 0 => "unknown",
+                    <= 7 => "chart",
+                    _ => "voyage",
+                };
+                sb.Append($"\"kind\":\"{kind}\",");
+                sb.Append($"\"biome\":\"{(_statsBiome ?? "").Replace("\"", "")}\",");
+                sb.Append($"\"dims\":[{_statsDims.X},{_statsDims.Y}],");
+                sb.Append($"\"maxLanterns\":{_statsMaxLanterns},\"placedLanterns\":{_statsPlacedLanterns},");
+                sb.Append("\"mapStats\":{");
+                sb.Append(string.Join(",",
+                    (_statsMapStats ?? new Dictionary<string, int>()).Select(kv => $"\"{kv.Key}\":{kv.Value}")));
+                sb.Append("},");
                 sb.Append($"\"durationSec\":{(int)(DateTime.UtcNow - _statsAreaStart).TotalSeconds},");
                 sb.Append($"\"sulphurStart\":{_statsSulphurStart?.ToString() ?? "null"},");
                 sb.Append($"\"sulphurEnd\":{_statsSulphurLast?.ToString() ?? "null"},");
@@ -226,6 +328,12 @@ public partial class DeepwaterEngagementSuite
         _statsSulphurLast = null;
         _statsSulphurMax = null;
         _statsSulphurPrev = null;
+        _statsBiome = null;
+        _statsDims = default;
+        _statsMaxLanterns = 0;
+        _statsPlacedLanterns = 0;
+        _statsMapStats = null;
+        _statsMapStatsAt = DateTime.MinValue;
         Array.Clear(_cellSulphurGain);
         Array.Clear(_cellChestsOpened);
         Array.Clear(_cellMonstersSeen);
