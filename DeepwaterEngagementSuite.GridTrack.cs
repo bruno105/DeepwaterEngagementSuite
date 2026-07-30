@@ -78,8 +78,22 @@ public partial class DeepwaterEngagementSuite
         }
     }
 
-    private int GridCellIndex(Vector2 gridPos)
+    // Região real do grid 3x3: a área da voyage inclui o barco e padding, então dims/3
+    // não casa com a costura dos charts. Âncora: bounding box de Handler.Monsters
+    // (lista server-side completa; monstros não spawnam no barco). Fallback: área toda.
+    private Vector2 _gridOrigin;
+    private Vector2 _gridSize;
+    private DateTime _gridBoundsAt = DateTime.MinValue;
+
+    private void UpdateGridBounds()
     {
+        if ((DateTime.UtcNow - _gridBoundsAt).TotalSeconds < 2)
+        {
+            return;
+        }
+
+        _gridBoundsAt = DateTime.UtcNow;
+
         Vector2i dims;
         try
         {
@@ -87,23 +101,87 @@ public partial class DeepwaterEngagementSuite
         }
         catch
         {
-            return -1;
+            return;
         }
 
         if (dims.X <= 0 || dims.Y <= 0)
         {
+            return;
+        }
+
+        float minX = float.MaxValue, minY = float.MaxValue, maxX = float.MinValue, maxY = float.MinValue;
+        var count = 0;
+        try
+        {
+            foreach (var monster in Handler?.Monsters ?? [])
+            {
+                if (monster is not { IsValid: true })
+                {
+                    continue;
+                }
+
+                var p = monster.GridPosNum;
+                if (p.X <= 0 || p.Y <= 0)
+                {
+                    continue;
+                }
+
+                minX = Math.Min(minX, p.X);
+                minY = Math.Min(minY, p.Y);
+                maxX = Math.Max(maxX, p.X);
+                maxY = Math.Max(maxY, p.Y);
+                count++;
+            }
+        }
+        catch
+        {
+            // handler ilegível; mantém bounds atuais
+        }
+
+        if (count >= 30)
+        {
+            const float pad = 40f;
+            var originX = Math.Max(0, minX - pad);
+            var originY = Math.Max(0, minY - pad);
+            _gridOrigin = new Vector2(originX, originY);
+            _gridSize = new Vector2(
+                Math.Min(dims.X, maxX + pad) - originX,
+                Math.Min(dims.Y, maxY + pad) - originY);
+        }
+        else
+        {
+            _gridOrigin = default;
+            _gridSize = new Vector2(dims.X, dims.Y);
+        }
+    }
+
+    private int GridCellIndex(Vector2 gridPos)
+    {
+        UpdateGridBounds();
+        if (_gridSize.X <= 0 || _gridSize.Y <= 0)
+        {
             return -1;
+        }
+
+        var nx = (gridPos.X - _gridOrigin.X) / _gridSize.X;
+        var ny = (gridPos.Y - _gridOrigin.Y) / _gridSize.Y;
+        if (nx is < -0.02f or > 1.02f || ny is < -0.02f or > 1.02f)
+        {
+            return -1; // fora da região dos charts (barco/padding)
         }
 
         // Convenção do board da voyage: linha 0 = embaixo do canvas. Com o Y do mundo
         // crescendo para o norte (flip no canvas), gridY baixo = embaixo = linha 0.
-        var c = Math.Clamp((int)(gridPos.X * 3 / dims.X), 0, 2);
-        var row = Math.Clamp((int)(gridPos.Y * 3 / dims.Y), 0, 2);
+        var c = Math.Clamp((int)(nx * 3), 0, 2);
+        var row = Math.Clamp((int)(ny * 3), 0, 2);
         return row * 3 + c;
     }
 
     private void GridTrackReset()
     {
+        _gridOrigin = default;
+        _gridSize = default;
+        _gridBoundsAt = DateTime.MinValue;
         _pathBreadcrumbs.Clear();
         Array.Clear(_cellSeconds);
         Array.Clear(_cellFirstOrder);
@@ -133,7 +211,8 @@ public partial class DeepwaterEngagementSuite
             return;
         }
 
-        if (dims.X <= 0 || dims.Y <= 0 || playerPos == default)
+        UpdateGridBounds();
+        if (dims.X <= 0 || dims.Y <= 0 || playerPos == default || _gridSize.X <= 0 || _gridSize.Y <= 0)
         {
             return;
         }
@@ -145,13 +224,16 @@ public partial class DeepwaterEngagementSuite
         }
 
         var canvasW = (float)settings.GridWindowSize.Value;
-        var canvasH = canvasW * dims.Y / dims.X;
+        var canvasH = canvasW * _gridSize.Y / _gridSize.X;
         var origin = ImGui.GetCursorScreenPos();
         var drawList = ImGui.GetWindowDrawList();
 
+        // Canvas mapeia a REGIÃO do grid (bbox dos monstros = os 9 charts, sem o barco).
         // Y do mundo cresce para o norte: canvas desenha gridY alto no TOPO (flip).
         Vector2 ToCanvas(Vector2 grid) =>
-            origin + new Vector2(grid.X / dims.X * canvasW, (1f - grid.Y / dims.Y) * canvasH);
+            origin + new Vector2(
+                (grid.X - _gridOrigin.X) / _gridSize.X * canvasW,
+                (1f - (grid.Y - _gridOrigin.Y) / _gridSize.Y) * canvasH);
 
         var gridCol = ImGui.ColorConvertFloat4ToU32(settings.GridColor.Value.ToImguiVec4());
         var pathCol = ImGui.ColorConvertFloat4ToU32(settings.PathColor.Value.ToImguiVec4());
@@ -161,16 +243,19 @@ public partial class DeepwaterEngagementSuite
 
         drawList.AddRectFilled(origin, origin + new Vector2(canvasW, canvasH), bgCol);
 
-        // Terreno gerado pelo Radar (textura "radar_minimap" cobre a área inteira),
-        // esticado para o canvas. Sem o Radar carregado, fica só o fundo escuro.
+        // Terreno gerado pelo Radar: a textura cobre a área INTEIRA; recorta por UV
+        // apenas a região do grid. V invertido para acompanhar o flip do canvas.
         try
         {
             if (Graphics.HasImage("radar_minimap"))
             {
-                // UV com V invertido para acompanhar o flip do eixo Y do canvas.
+                var u0 = _gridOrigin.X / dims.X;
+                var u1 = (_gridOrigin.X + _gridSize.X) / dims.X;
+                var vTop = (_gridOrigin.Y + _gridSize.Y) / dims.Y;
+                var vBottom = _gridOrigin.Y / dims.Y;
                 drawList.AddImage(Graphics.GetTextureId("radar_minimap"),
                     origin, origin + new Vector2(canvasW, canvasH),
-                    new Vector2(0, 1), new Vector2(1, 0));
+                    new Vector2(u0, vTop), new Vector2(u1, vBottom));
             }
         }
         catch
