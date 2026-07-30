@@ -129,7 +129,8 @@ public partial class DeepwaterEngagementSuite
             if (max > 0)
             {
                 _statsMaxLanterns = max;
-                _statsPlacedLanterns = Handler.PlacedLanternCount;
+                // Máximo, não último: o contador zera na extração/fim do run.
+                _statsPlacedLanterns = Math.Max(_statsPlacedLanterns, Handler.PlacedLanternCount);
             }
         }
         catch
