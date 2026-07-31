@@ -399,18 +399,14 @@ public partial class DeepwaterEngagementSuite
             var inTop = topChartSet.Contains(i);
             Graphics.DrawTextWithBackground($"{value:F0}", chartTopLeft + new Vector2(0, 12),
                 inTop ? Color.LightGreen : Color.Gray, Color.Black);
-            var craftShown = inTop && chartEntries[i].ExplicitCount == 0;
-            if (craftShown)
-            {
-                Graphics.DrawTextWithBackground("craft", chartTopLeft + new Vector2(0, 24), Color.Yellow, Color.Black);
-            }
-
+            // (Sem tag "craft" aqui: chart no pool já rodou solo e NÃO rola mais —
+            // mecânica da liga. A janela de craft é o inventário, pré-run.)
             // Peça exclusiva/âncora de estratégia: NÃO queimar em Speedrun/AlcGo
             // (a reserva dura do Solve respeita; o overlay te mostra o porquê).
             if (PieceOwnerTag(piece) is { } ownerTag)
             {
                 Graphics.DrawTextWithBackground(ownerTag,
-                    chartTopLeft + new Vector2(0, craftShown ? 36 : 24), Color.Cyan, Color.Black);
+                    chartTopLeft + new Vector2(0, 24), Color.Cyan, Color.Black);
             }
         }
 

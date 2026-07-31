@@ -18,10 +18,12 @@
 - Chart craft: cada explicit carrega um reward rider (values[0]) que cai em UMA
   recompensa (quant/rarity/gold/sulphur/pack); implícito real oculto até chartar
   na Valerie (semáforo do inventário recalibrado com 25 charts reais).
-  **VEREDITO do craft (31/07, teste etiquetado)**: riders NÃO aplicam em run SOLO
-  (86+ runs + 1 verde deliberado, instância sempre 20/20/20) — craft é economia
-  exclusiva de VOYAGE (registros de voyage mostram stats acima do baseline).
-  Chaos só em chart que vai pro board.
+  **MECÂNICA + VEREDITO do craft (31/07)**: TODO chart obrigatoriamente RODA SOLO
+  antes de virar peça de plan (pipeline da liga), e o run trava o craft ("can't
+  roll after running"). Riders ficam DORMENTES no solo (87 runs + teste etiquetado,
+  instância sempre 20/20/20) e pagam na VOYAGE. Fluxo: decidir keeper → rolar/
+  exaltar ANTES do solo → rodar solo → board. Rider budget ≈ 40-50 por mod
+  (6-mod ≈ 225-300 vs ~150 do 4-mod) → Exalt paga p/ peça de board.
 - BiomeWeights medidos: CoralReef=CoralForest=13 (n~40; diferença era ruído),
   Sandy 6, ThermalVent 10 placeholder. Registro da voyage Speedrun de 31/07 de
   manhã PERDEU (HUD fechado sem flush) — flush periódico ainda pendente.
