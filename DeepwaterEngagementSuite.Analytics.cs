@@ -216,12 +216,12 @@ public partial class DeepwaterEngagementSuite
         ImGui.TextUnformatted(_analyticsChartsSummary ?? "");
 
         if (_analyticsVoyages is { Count: > 0 } &&
-            ImGui.BeginTable("zoneAnalytics", 13, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
+            ImGui.BeginTable("zoneAnalytics", 14, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
         {
             foreach (var header in new[]
                      {
                          "time", "strategy", "min", "sulphur", "sul/min", "cells",
-                         "chests", "R/U", "div", "ex", "chaos", "scarab", "deck",
+                         "chests", "rare", "unique", "div", "ex", "chaos", "scarab", "deck",
                      })
             {
                 ImGui.TableSetupColumn(header);
@@ -246,7 +246,9 @@ public partial class DeepwaterEngagementSuite
                 ImGui.TableNextColumn();
                 ImGui.TextUnformatted($"{r.Chests}");
                 ImGui.TableNextColumn();
-                ImGui.TextUnformatted($"{r.Rares}/{r.Uniques}");
+                ImGui.TextUnformatted($"{r.Rares}");
+                ImGui.TableNextColumn();
+                ImGui.TextUnformatted($"{r.Uniques}");
                 ImGui.TableNextColumn();
                 ImGui.TextUnformatted($"{r.Div}");
                 ImGui.TableNextColumn();
@@ -299,9 +301,9 @@ public partial class DeepwaterEngagementSuite
             }
 
             if (_analyticsCharts is { Count: > 0 } &&
-                ImGui.BeginTable("chartRuns", 10, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
+                ImGui.BeginTable("chartRuns", 11, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
             {
-                foreach (var header in new[] { "time", "biome", "room", "s", "sulphur", "chests", "R/U", "scarab", "chaos", "div/ex" })
+                foreach (var header in new[] { "time", "biome", "room", "s", "sulphur", "chests", "rare", "unique", "scarab", "chaos", "div/ex" })
                 {
                     ImGui.TableSetupColumn(header);
                 }
@@ -323,7 +325,9 @@ public partial class DeepwaterEngagementSuite
                     ImGui.TableNextColumn();
                     ImGui.TextUnformatted($"{r.Chests}");
                     ImGui.TableNextColumn();
-                    ImGui.TextUnformatted($"{r.Rares}/{r.Uniques}");
+                    ImGui.TextUnformatted($"{r.Rares}");
+                    ImGui.TableNextColumn();
+                    ImGui.TextUnformatted($"{r.Uniques}");
                     ImGui.TableNextColumn();
                     ImGui.TextUnformatted($"{r.Scarabs}");
                     ImGui.TableNextColumn();
