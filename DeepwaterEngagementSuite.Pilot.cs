@@ -365,10 +365,29 @@ public partial class DeepwaterEngagementSuite
             _pilotUnreachable.Remove(expired);
         }
 
-        var reachable = objectives.Where(o => !_pilotUnreachable.ContainsKey(QuantizeTarget(o.Pos))).ToList();
+        // Alvo em bolsão de terreno DESCONEXO do jogador nem entra na seleção
+        // (mata a reta-para-o-inalcançável sem esperar os 6s do blacklist).
+        // Componente 0 = desconhecido: permissivo, o blacklist cobre.
+        var playerComponent = ComponentAt(_playerGridPos);
+        var reachable = objectives.Where(o =>
+            {
+                if (_pilotUnreachable.ContainsKey(QuantizeTarget(o.Pos)))
+                {
+                    return false;
+                }
+
+                if (playerComponent == 0)
+                {
+                    return true;
+                }
+
+                var targetComponent = ComponentAt(o.Pos);
+                return targetComponent == 0 || targetComponent == playerComponent;
+            })
+            .ToList();
         if (reachable.Count == 0)
         {
-            reachable = objectives; // tudo em blacklist: melhor apontar algo que nada
+            reachable = objectives; // tudo filtrado: melhor apontar algo que nada
         }
 
         var distPenalty = StrategyDistancePenalty.GetValueOrDefault(strategyName, 0.03);
@@ -456,10 +475,17 @@ public partial class DeepwaterEngagementSuite
             }
             else
             {
+                // Sem rota (Radar calculando ou alvo sem caminho): toco curto de
+                // DIREÇÃO no mundo — a reta completa parecia um traçado válido
+                // atravessando terreno. A linha inteira fica só no mapa grande.
                 var playerScreen = GetWorldScreenPosition(_playerGridPos);
-                if (IsRoughlyOnScreen(playerScreen) || IsRoughlyOnScreen(targetScreen))
+                var toTarget = obj.Pos - _playerGridPos;
+                var dist = toTarget.Length();
+                var stubEnd = dist > 150f ? _playerGridPos + toTarget * (150f / dist) : obj.Pos;
+                var stubScreen = GetWorldScreenPosition(stubEnd);
+                if (IsRoughlyOnScreen(playerScreen) || IsRoughlyOnScreen(stubScreen))
                 {
-                    Graphics.DrawLine(playerScreen, targetScreen, 3, color);
+                    Graphics.DrawLine(playerScreen, stubScreen, 3, color);
                 }
 
                 if (_largeMapOpen)

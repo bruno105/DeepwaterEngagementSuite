@@ -87,6 +87,9 @@ public partial class DeepwaterEngagementSuite
     private Vector2 _gridSize;
     private bool _regionComputed;
     private volatile bool _regionComputing;
+    // Rótulo de componente conexo por célula do downsample (0 = inandável). O Pilot
+    // usa p/ descartar objetivos em bolsões sem caminho ANTES de tentar rota.
+    private short[,] _terrainComponents;
 
     private void UpdateGridBounds()
     {
@@ -152,6 +155,8 @@ public partial class DeepwaterEngagementSuite
 
             // Flood fill: maior componente conexo = mapa jogável (barco é componente menor).
             var visited = new bool[gh, gw];
+            var compIds = new short[gh, gw];
+            short compId = 0;
             var bestCount = 0;
             int bestMinX = 0, bestMinY = 0, bestMaxX = 0, bestMaxY = 0;
             var stack = new Stack<(int Y, int X)>();
@@ -164,6 +169,7 @@ public partial class DeepwaterEngagementSuite
                         continue;
                     }
 
+                    compId++;
                     var count = 0;
                     int minX = sx, minY = sy, maxX = sx, maxY = sy;
                     stack.Push((sy, sx));
@@ -171,6 +177,7 @@ public partial class DeepwaterEngagementSuite
                     while (stack.TryPop(out var cur))
                     {
                         count++;
+                        compIds[cur.Y, cur.X] = compId;
                         minX = Math.Min(minX, cur.X);
                         minY = Math.Min(minY, cur.Y);
                         maxX = Math.Max(maxX, cur.X);
@@ -196,6 +203,8 @@ public partial class DeepwaterEngagementSuite
                     }
                 }
             }
+
+            _terrainComponents = compIds; // atribuição de referência = atômica p/ leitores
 
             if (bestCount > 0)
             {
@@ -286,11 +295,41 @@ public partial class DeepwaterEngagementSuite
         return null;
     }
 
+    /// <summary>Componente conexo no ponto (0 = inandável/desconhecido; busca 3x3 no downsample).</summary>
+    private short ComponentAt(Vector2 grid)
+    {
+        var comps = _terrainComponents;
+        if (comps == null)
+        {
+            return 0;
+        }
+
+        const int step = 8;
+        var y = (int)grid.Y / step;
+        var x = (int)grid.X / step;
+        for (var dy = -1; dy <= 1; dy++)
+        {
+            for (var dx = -1; dx <= 1; dx++)
+            {
+                var ny = y + dy;
+                var nx = x + dx;
+                if (ny >= 0 && ny < comps.GetLength(0) && nx >= 0 && nx < comps.GetLength(1) &&
+                    comps[ny, nx] != 0)
+                {
+                    return comps[ny, nx];
+                }
+            }
+        }
+
+        return 0;
+    }
+
     private void GridTrackReset()
     {
         _gridOrigin = default;
         _gridSize = default;
         _regionComputed = false;
+        _terrainComponents = null;
         _pathBreadcrumbs.Clear();
         Array.Clear(_cellSeconds);
         Array.Clear(_cellFirstOrder);
