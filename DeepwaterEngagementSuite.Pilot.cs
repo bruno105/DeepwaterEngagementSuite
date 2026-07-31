@@ -472,18 +472,26 @@ public partial class DeepwaterEngagementSuite
             .ToList();
         if (reachable.Count == 0)
         {
-            reachable = objectives; // tudo filtrado: melhor apontar algo que nada
+            // Tudo filtrado por componente: re-inclui os de componente
+            // desconhecido, mas NUNCA os blacklistados — o "apontar algo que
+            // nada" ressuscitava o alvo sem rota e a reta voltava para sempre
+            // (31/07). Se sobrar nada, ficar sem seta é o correto.
+            reachable = objectives
+                .Where(o => !_pilotUnreachable.ContainsKey(QuantizeTarget(o.Pos)))
+                .ToList();
         }
 
         var distPenalty = StrategyDistancePenalty.GetValueOrDefault(strategyName, 0.03);
         var darkToll = StrategyDarkWaterToll.GetValueOrDefault(strategyName, 0.08);
 
-        // Objetivos de EXPANSÃO (tiles do plano, alvos unrevealed) não pagam o
-        // pedágio de dark water: a travessia até eles É a exploração — as
-        // lanterns plantadas no caminho viram rede. O pedágio pune desvios de
-        // COLETA (chest/drop fora da rede), não a doutrina.
+        // Objetivos de EXPANSÃO (SÓ tiles do plano) não pagam o pedágio de dark
+        // water: a travessia até eles É a exploração — as lanterns plantadas no
+        // caminho viram rede. Unrevealed paga pedágio normal: a isenção fazia um
+        // chart do outro lado do mapa (prio 80, travessia grátis) vencer com
+        // score positivo e puxar reta eterna (31/07) — revelar chart perto da
+        // rede continua valendo; do outro lado do mapa, não.
         bool IsExpansion((string Label, Vector2 Pos, int Prio) o) =>
-            o.Label == "Unrevealed" || tileObjectivePositions.Contains(QuantizeTarget(o.Pos));
+            tileObjectivePositions.Contains(QuantizeTarget(o.Pos));
 
         double Score((string Label, Vector2 Pos, int Prio) o) =>
             o.Prio - Vector2.Distance(_playerGridPos, o.Pos) * distPenalty -
