@@ -315,6 +315,7 @@ public partial class DeepwaterEngagementSuite
 
         // Tiles do PLANO ainda não visitados viram objetivos: o de maior multiplicador
         // puxa a rota — evita deixar o tile jackpot para o fim (e não alcançá-lo).
+        var tileObjectivePositions = new HashSet<(int, int)>();
         if (_plannedMults != null && _regionComputed)
         {
             var maxPlanned = 0.01;
@@ -342,6 +343,7 @@ public partial class DeepwaterEngagementSuite
                     // Centro geométrico pode ser inandável — snap para o terreno,
                     // senão o Radar não consegue rotear e a seta vira linha reta.
                     var target = SnapToWalkable(center) ?? center;
+                    tileObjectivePositions.Add(QuantizeTarget(target));
                     var prio = 40 + (int)(60 * _plannedMults[r, c] / maxPlanned);
                     objectives.Add(($"Tile ({r},{c}) x{_plannedMults[r, c]:F1}", target, prio));
 
@@ -467,8 +469,16 @@ public partial class DeepwaterEngagementSuite
         var distPenalty = StrategyDistancePenalty.GetValueOrDefault(strategyName, 0.03);
         var darkToll = StrategyDarkWaterToll.GetValueOrDefault(strategyName, 0.08);
 
+        // Objetivos de EXPANSÃO (tiles do plano, alvos unrevealed) não pagam o
+        // pedágio de dark water: a travessia até eles É a exploração — as
+        // lanterns plantadas no caminho viram rede. O pedágio pune desvios de
+        // COLETA (chest/drop fora da rede), não a doutrina.
+        bool IsExpansion((string Label, Vector2 Pos, int Prio) o) =>
+            o.Label == "Unrevealed" || tileObjectivePositions.Contains(QuantizeTarget(o.Pos));
+
         double Score((string Label, Vector2 Pos, int Prio) o) =>
-            o.Prio - Vector2.Distance(_playerGridPos, o.Pos) * distPenalty - NetworkDist(o.Pos) * darkToll;
+            o.Prio - Vector2.Distance(_playerGridPos, o.Pos) * distPenalty -
+            (IsExpansion(o) ? 0 : NetworkDist(o.Pos) * darkToll);
 
         var next = reachable
             .OrderByDescending(Score)
@@ -493,12 +503,27 @@ public partial class DeepwaterEngagementSuite
         // Piso de valor: se nem o MELHOR alvo sobrevive aos pedágios (score <= 0),
         // andar custa mais que o prêmio — ex.: gold chest prio 8 a 1.237un
         // (score -48) puxando reta pelo mapa inteiro por ser o último objetivo
-        // vivo (31/07). Sem seta nesse caso; o painel manda extrair.
+        // vivo (31/07). MAS o piso é condição de FIM de run: enquanto houver
+        // exploração viva (tile não visitado / unrevealed), guiar para a melhor
+        // expansão mesmo negativa — EXTRACT falso aos 00:50 com 59 lanterns na
+        // mão (relato 31/07) era o piso disparando no começo da run.
         var nothingWorthTheWalk = false;
         if (next is { } best && Score(best) <= 0)
         {
-            next = null;
-            nothingWorthTheWalk = true;
+            var bestExpansion = reachable
+                .Where(o => IsExpansion(o))
+                .OrderByDescending(Score)
+                .Cast<(string Label, Vector2 Pos, int Prio)?>()
+                .FirstOrDefault();
+            if (bestExpansion != null)
+            {
+                next = bestExpansion;
+            }
+            else
+            {
+                next = null;
+                nothingWorthTheWalk = true;
+            }
         }
 
         _pilotStickyPos = next?.Pos;
