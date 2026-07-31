@@ -31,10 +31,11 @@ public partial class DeepwaterEngagementSuite
     private DateTime _lockerSulphurRead = DateTime.MinValue;
 
     /// <summary>
-    /// Sulphur guardado no locker do barco (ServerData.PlayerInventories, slot
-    /// DeepwaterLockerInventory1), como stacks de "Dead Man's Sulphur"
-    /// (CurrencyDeepwater, 50k/stack). O jogo debita custos direto de lá, então
-    /// carteira (Handler.Sulphur) sozinha subestima a folga. Cache de 2s.
+    /// Dead Man's Sulphur no locker do barco (ServerData.PlayerInventories, slot
+    /// DeepwaterLockerInventory1), como stacks de CurrencyDeepwater (50k/stack).
+    /// É a MOEDA DO PLANNER (rerolls etc., debitada direto do locker) — não
+    /// confundir com Handler.Sulphur, que é o contador de coleta do mergulho e
+    /// congela no valor da última run. Cache de 2s.
     /// </summary>
     private int LockerSulphur()
     {
@@ -991,31 +992,21 @@ public partial class DeepwaterEngagementSuite
             var ratio = RerollAdvisor.BorderRatio(effective, baseline);
             var keep = RerollAdvisor.ShouldKeep(ratio, Settings.VoyageSettings.RerollKeepThreshold.Value);
 
-            int? sulphur = null;
-            try
-            {
-                sulphur = GameController.IngameState.ServerData.DeepwaterHandler?.Sulphur;
-            }
-            catch
-            {
-                // fora de contexto deepwater o handler pode não estar legível
-            }
-
-            // O jogo debita rerolls direto do LOCKER — a folga real é carteira +
-            // banco, não o Handler.Sulphur sozinho (que travava o advisor no
-            // amarelo com 250k guardados).
-            var lockerSulphur = LockerSulphur();
-            var available = sulphur is { } w ? w + lockerSulphur : (int?)null;
+            // A moeda do planner é o Dead Man's Sulphur, debitado do LOCKER do
+            // barco. NÃO usar Handler.Sulphur aqui: aquilo é o contador de coleta
+            // do MERGULHO (recurso das minas; congela no valor da última run) —
+            // moeda diferente da do planner (correção do Bruno, 31/07).
+            var available = LockerSulphur();
 
             var nextCost = RerollAdvisor.NextCost(_rerollCount);
             if (keep)
             {
                 ImGui.TextColored(Color.LightGreen.ToImguiVec4(), $"Borders: R={ratio:F2} - KEEP");
             }
-            else if (available is { } a && a < nextCost)
+            else if (available < nextCost)
             {
                 ImGui.TextColored(Color.Yellow.ToImguiVec4(),
-                    $"Borders: R={ratio:F2} - REROLL when you can (sulphur: {a:N0}/{nextCost:N0})");
+                    $"Borders: R={ratio:F2} - REROLL when you can (Dead Man's Sulphur: {available:N0}/{nextCost:N0})");
             }
             else
             {
@@ -1023,12 +1014,10 @@ public partial class DeepwaterEngagementSuite
                     $"Borders: R={ratio:F2} - REROLL (next: {nextCost:N0} sulphur)");
             }
 
-            if (available != null && (keep || available >= nextCost))
+            if (keep || available >= nextCost)
             {
                 ImGui.SameLine();
-                ImGui.Text(lockerSulphur > 0
-                    ? $"(sulphur: {sulphur:N0} + {lockerSulphur:N0} locker)"
-                    : $"(sulphur: {sulphur:N0})");
+                ImGui.Text($"(Dead Man's Sulphur: {available:N0})");
             }
 
             ImGui.Text($"Rerolls this board: {_rerollCount}");
