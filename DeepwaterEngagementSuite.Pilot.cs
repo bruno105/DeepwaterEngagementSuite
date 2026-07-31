@@ -80,6 +80,22 @@ public partial class DeepwaterEngagementSuite
         ["DivineBoxes"] = 0.02,
     };
 
+    // Pedágio EXTRA por unidade de DARK WATER (distância à borda da rede de
+    // bolhas): dentro da rede andar é de graça, fora custa lanterns + timer de
+    // afogamento — o custo real de alcançar algo é a distância à REDE, não ao
+    // jogador. Zero para objetivos já cobertos, então o comportamento local não
+    // muda; só a travessia paga. AlcGo = queima local, quase nunca atravessa
+    // (expansão vai para o alvo mais perto da borda); Divine = o tile âncora
+    // vale a travessia.
+    private static readonly Dictionary<string, double> StrategyDarkWaterToll = new()
+    {
+        ["AlcGo"] = 0.12,
+        ["Speedrun"] = 0.08,
+        ["Meatfish"] = 0.05,
+        ["DivineBorder"] = 0.03,
+        ["DivineBoxes"] = 0.03,
+    };
+
     private List<Vector2i> _pilotRoute;
     private Vector2 _pilotRouteTarget;
     private CancellationTokenSource _pilotRouteCts;
@@ -232,6 +248,23 @@ public partial class DeepwaterEngagementSuite
         var elapsed = DateTime.UtcNow - _statsAreaStart;
         // Decaimento dos objetivos de buff: valor cheio no início, piso de 35% aos 13+ min.
         var buffDecay = Math.Max(0.35, 1.0 - elapsed.TotalMinutes / 20.0);
+
+        // Rede de bolhas viva (posição + raio) para o custo de dark water. O ×1.5
+        // é a mesma tolerância do in-field: objetivo "quase dentro" não paga
+        // travessia. Sem bolhas legíveis, custo zero — vira o guloso antigo.
+        List<(Vector2 Center, float Radius)> netBubbles = [];
+        try
+        {
+            netBubbles = Bubbles.Select(b => (new Vector2(b.Position.X, b.Position.Y), b.Radius)).ToList();
+        }
+        catch
+        {
+            // bolhas ilegíveis em transição
+        }
+
+        float NetworkDist(Vector2 pos) => netBubbles.Count == 0
+            ? 0
+            : Math.Max(0, netBubbles.Min(b => Vector2.Distance(pos, b.Center) - b.Radius * 1.5f));
 
         int Priority(string kind) =>
             overrides?.GetValueOrDefault(kind, PilotBasePriority.GetValueOrDefault(kind, 10))
@@ -426,8 +459,11 @@ public partial class DeepwaterEngagementSuite
         }
 
         var distPenalty = StrategyDistancePenalty.GetValueOrDefault(strategyName, 0.03);
+        var darkToll = StrategyDarkWaterToll.GetValueOrDefault(strategyName, 0.08);
         var next = reachable
-            .OrderByDescending(o => o.Prio - Vector2.Distance(_playerGridPos, o.Pos) * distPenalty)
+            .OrderByDescending(o => o.Prio
+                                    - Vector2.Distance(_playerGridPos, o.Pos) * distPenalty
+                                    - NetworkDist(o.Pos) * darkToll)
             .Cast<(string Label, Vector2 Pos, int Prio)?>()
             .FirstOrDefault();
 
@@ -539,6 +575,34 @@ public partial class DeepwaterEngagementSuite
                 }
             }
 
+            // Alvo FORA da rede: marca o ponto de SAÍDA — a borda da bolha mais
+            // próxima do alvo, onde o dark water começa e a próxima lantern deve
+            // ser plantada ("próximo ponto de reach" da expansão por fronteira).
+            if (netBubbles.Count > 0 && NetworkDist(obj.Pos) > 0)
+            {
+                var nearest = netBubbles.MinBy(b => Vector2.Distance(obj.Pos, b.Center) - b.Radius);
+                var dir = obj.Pos - nearest.Center;
+                if (dir.LengthSquared() > 1)
+                {
+                    var exitPos = nearest.Center + dir * (nearest.Radius / dir.Length());
+                    if (_largeMapOpen)
+                    {
+                        Graphics.DrawTextWithBackground("EXIT",
+                            Graphics.GridToMap(exitPos, _playerGridPos), color, Color.Black);
+                    }
+
+                    if (worldDrawing)
+                    {
+                        var exitScreen = GetWorldScreenPosition(exitPos);
+                        if (IsRoughlyOnScreen(exitScreen))
+                        {
+                            Graphics.DrawTextWithBackground("EXIT",
+                                exitScreen + new Vector2(0, -18), color, Color.Black);
+                        }
+                    }
+                }
+            }
+
             if (IsRoughlyOnScreen(targetScreen))
             {
                 Graphics.DrawTextWithBackground(
@@ -638,8 +702,21 @@ public partial class DeepwaterEngagementSuite
 
         if (next is { } n)
         {
-            ImGui.TextColored(settings.ObjectiveColor.Value.ToImguiVec4(),
-                $"Next: {n.Label} ({Vector2.Distance(_playerGridPos, n.Pos):F0})");
+            var nextLine = $"Next: {n.Label} ({Vector2.Distance(_playerGridPos, n.Pos):F0})";
+            var netDist = NetworkDist(n.Pos);
+            if (netDist > 0 && netBubbles.Count > 0)
+            {
+                // Orçamento de travessia: cada lantern plantada na borda estende o
+                // alcance em ~1.5×raio (bolha nova tangente à rede, com a mesma
+                // tolerância do in-field) — estimativa, não contrato.
+                var avgRadius = netBubbles.Average(b => b.Radius);
+                var lanternCost = avgRadius > 0 ? (int)Math.Ceiling(netDist / (avgRadius * 1.5f)) : 0;
+                nextLine += lanternCost > 0
+                    ? $"  - outside network: ~{lanternCost} lantern{(lanternCost > 1 ? "s" : "")}"
+                    : "  - outside network";
+            }
+
+            ImGui.TextColored(settings.ObjectiveColor.Value.ToImguiVec4(), nextLine);
         }
 
         ImGui.End();
