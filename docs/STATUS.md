@@ -1,4 +1,26 @@
-# DeepwaterEngagementSuite — estado do projeto (sessão 29–30/07/2026)
+# DeepwaterEngagementSuite — estado do projeto (sessões 29–31/07/2026)
+
+## Validações fechadas em 31/07
+
+- **Pipeline de estratégias AUDITADO dígito a dígito**: harness (scratchpad
+  StrategyAudit) roda o código real (ScoreBoard/BoostPiece/BoostBorderMultiplier/
+  ScreenToGrid) sobre board+pool do bridge (`voyage` agora expõe room+stats) e
+  reproduziu o painel exato (905/1053/206/232/734/3484 com biomas 0; 986/1156/...
+  com biomas calibrados). Boosts de border, gates, reserva e penalidades conferidos
+  à mão numa board real (QuantPerConn 2.8→4.6, GL 5→7, IncRares3 2→3).
+- **Solver DP validado in-game**: 47 topologias exploradas/2.487 podadas, ótimo
+  certificado; ~5s eram releitura de memória (corrigido: peças via cache na thread
+  de render, stats em passada única, Id refeito p/ índice atual do pool).
+- **Protocolo de edição de profile** (aprendido a caro): editar o JSON em disco e
+  o usuário clicar "Reload profiles" pela UI (relê disco + ApplyProfile limpa o
+  _chartValueCache). Edits NÃO sobrevivem a Reload Plugins (o destroy sincroniza o
+  profile ATIVO da memória por cima do arquivo).
+- Chart craft: cada explicit carrega um reward rider (values[0]) que cai em UMA
+  recompensa (quant/rarity/gold/sulphur/pack); implícito real oculto até chartar
+  na Valerie (semáforo do inventário recalibrado com 25 charts reais).
+- BiomeWeights medidos: CoralReef=CoralForest=13 (n~40; diferença era ruído),
+  Sandy 6, ThermalVent 10 placeholder. Registro da voyage Speedrun de 31/07 de
+  manhã PERDEU (HUD fechado sem flush) — flush periódico ainda pendente.
 
 Âncora de contexto para sessões futuras. Detalhes: specs/plans em `docs/superpowers/`,
 `docs/upstream-integration-notes.md`, `docs/community-strategies-reference.md`.
