@@ -128,6 +128,11 @@ public partial class DeepwaterEngagementSuite
     // varrer antes de expandir.
     private const int PilotSweepMinPriority = 40;
 
+    // Alcance da varredura FORA da rede: coleta que preste dentro deste raio
+    // entra na varredura mesmo no escuro (marker lembrado de baú a ~280un
+    // perdia para o tile jackpot a 620un — o tile não paga dark water).
+    private const float PilotSweepNearRadius = 400f;
+
     private Vector2? _extractionPos;
     private DateTime _extractionRead = DateTime.MinValue;
 
@@ -541,11 +546,17 @@ public partial class DeepwaterEngagementSuite
             (IsExpansion(o) ? 0 : NetworkDist(o.Pos) * darkToll);
 
         // Doutrina "catar antes de expandir" (Bruno, 31/07): enquanto houver
-        // coleta que preste DENTRO da rede iluminada, ela fica com a seta até
-        // ser coletada — expansão (tiles do plano/unrevealed) só com a rede
-        // varrida. Sobras muito distantes ainda cedem via piso (score <= 0).
+        // coleta que preste DENTRO da rede iluminada — OU logo ali fora, ao
+        // alcance — ela fica com a seta até ser coletada; expansão (tiles do
+        // plano/unrevealed) só depois. O raio de proximidade existe porque a
+        // expansão não paga pedágio de dark water e o tile jackpot (prio ~100)
+        // vencia baú de currency a 280un no escuro (relato 31/07): se vamos
+        // gastar lantern atravessando, o que está no caminho vem primeiro.
+        // Sobras muito distantes ainda cedem via piso (score <= 0).
         var sweep = reachable
-            .Where(o => !IsExpansion(o) && o.Prio >= PilotSweepMinPriority && NetworkDist(o.Pos) <= 0)
+            .Where(o => !IsExpansion(o) && o.Prio >= PilotSweepMinPriority &&
+                        (NetworkDist(o.Pos) <= 0 ||
+                         Vector2.Distance(_playerGridPos, o.Pos) <= PilotSweepNearRadius))
             .ToList();
         var pool = sweep.Count > 0 ? sweep : reachable;
 
