@@ -26,6 +26,52 @@ public partial class DeepwaterEngagementSuite
 {
     private VoyageSolutionResult _result;
     private readonly System.Collections.Concurrent.ConcurrentQueue<string> _unknownBiomes = new();
+
+    private int _lockerSulphur;
+    private DateTime _lockerSulphurRead = DateTime.MinValue;
+
+    /// <summary>
+    /// Sulphur guardado no locker do barco (ServerData.PlayerInventories, slot
+    /// DeepwaterLockerInventory1), como stacks de "Dead Man's Sulphur"
+    /// (CurrencyDeepwater, 50k/stack). O jogo debita custos direto de lá, então
+    /// carteira (Handler.Sulphur) sozinha subestima a folga. Cache de 2s.
+    /// </summary>
+    private int LockerSulphur()
+    {
+        if ((DateTime.UtcNow - _lockerSulphurRead).TotalSeconds < 2)
+        {
+            return _lockerSulphur;
+        }
+
+        _lockerSulphurRead = DateTime.UtcNow;
+        var total = 0;
+        try
+        {
+            foreach (var holder in GameController.IngameState.ServerData.PlayerInventories)
+            {
+                if (holder?.Inventory is not { } inv ||
+                    !inv.InventSlot.ToString().Contains("DeepwaterLocker", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                foreach (var item in inv.Items ?? [])
+                {
+                    if (item?.Path?.Contains("CurrencyDeepwater", StringComparison.OrdinalIgnoreCase) == true)
+                    {
+                        total += item.GetComponent<Stack>()?.Size ?? 0;
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // inventários ilegíveis em transição
+        }
+
+        _lockerSulphur = total;
+        return total;
+    }
     private readonly Dictionary<long, (MapPiece Piece, int ExplicitCount)> _chartValueCache = new();
     private int _rerollCount;
     private string _lastBorderKey;
@@ -955,15 +1001,21 @@ public partial class DeepwaterEngagementSuite
                 // fora de contexto deepwater o handler pode não estar legível
             }
 
+            // O jogo debita rerolls direto do LOCKER — a folga real é carteira +
+            // banco, não o Handler.Sulphur sozinho (que travava o advisor no
+            // amarelo com 250k guardados).
+            var lockerSulphur = LockerSulphur();
+            var available = sulphur is { } w ? w + lockerSulphur : (int?)null;
+
             var nextCost = RerollAdvisor.NextCost(_rerollCount);
             if (keep)
             {
                 ImGui.TextColored(Color.LightGreen.ToImguiVec4(), $"Borders: R={ratio:F2} - KEEP");
             }
-            else if (sulphur is { } s && s < nextCost)
+            else if (available is { } a && a < nextCost)
             {
                 ImGui.TextColored(Color.Yellow.ToImguiVec4(),
-                    $"Borders: R={ratio:F2} - REROLL when you can (sulphur: {s:N0}/{nextCost:N0})");
+                    $"Borders: R={ratio:F2} - REROLL when you can (sulphur: {a:N0}/{nextCost:N0})");
             }
             else
             {
@@ -971,10 +1023,12 @@ public partial class DeepwaterEngagementSuite
                     $"Borders: R={ratio:F2} - REROLL (next: {nextCost:N0} sulphur)");
             }
 
-            if (sulphur != null && (keep || sulphur >= nextCost))
+            if (available != null && (keep || available >= nextCost))
             {
                 ImGui.SameLine();
-                ImGui.Text($"(sulphur: {sulphur:N0})");
+                ImGui.Text(lockerSulphur > 0
+                    ? $"(sulphur: {sulphur:N0} + {lockerSulphur:N0} locker)"
+                    : $"(sulphur: {sulphur:N0})");
             }
 
             ImGui.Text($"Rerolls this board: {_rerollCount}");
