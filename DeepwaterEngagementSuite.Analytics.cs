@@ -19,12 +19,14 @@ public partial class DeepwaterEngagementSuite
     // botão de emergência que finaliza o registro atual na hora (cache/instância
     // presa — o flush normal só acontece na troca de instância).
     private sealed record ZoneAnalyticsRow(
-        string Time, string Strategy, double Minutes, int SulGain, double SulPerMin,
+        DateTime Time, string Strategy, double Minutes, int SulGain, double SulPerMin,
         int Cells, int Chests, int Rares, int Uniques, int Div, int Ex, int Chaos, int Scarabs, int Decks);
 
     private sealed record ChartAnalyticsRow(
-        string Time, string Biome, string Room, int DurSec, int SulGain,
+        DateTime Time, string Biome, string Room, int DurSec, int SulGain,
         int Chests, int Rares, int Uniques, int Scarabs, int Chaos, int Div, int Ex);
+
+    private const string AnalyticsTimeFormat = "dd/MM/yy HH:mm:ss";
 
     private sealed class BiomeAggregate
     {
@@ -38,9 +40,39 @@ public partial class DeepwaterEngagementSuite
 
     private List<ZoneAnalyticsRow> _analyticsVoyages;
     private List<ChartAnalyticsRow> _analyticsCharts;
-    private Dictionary<string, BiomeAggregate> _analyticsBiomes;
+    private List<(string Biome, BiomeAggregate Agg)> _analyticsBiomes;
     private string _analyticsChartsSummary;
     private string _analyticsStatus;
+
+    // Ordenação por clique no header: aplica o sort spec do ImGui à lista viva.
+    private static void ApplyTableSort<T>(List<T> rows, Func<int, Comparison<T>> comparerFor)
+    {
+        try
+        {
+            var specs = ImGui.TableGetSortSpecs();
+            if (!specs.SpecsDirty || specs.SpecsCount <= 0)
+            {
+                return;
+            }
+
+            var spec = specs.Specs;
+            var cmp = comparerFor(spec.ColumnIndex);
+            if (cmp != null)
+            {
+                rows.Sort(cmp);
+                if (spec.SortDirection == ImGuiSortDirection.Descending)
+                {
+                    rows.Reverse();
+                }
+            }
+
+            specs.SpecsDirty = false;
+        }
+        catch
+        {
+            // sort specs indisponíveis (tabela sem foco/versão do ImGui)
+        }
+    }
 
     private void LoadZoneAnalytics()
     {
@@ -109,8 +141,8 @@ public partial class DeepwaterEngagementSuite
 
                     var cTime = DateTime.TryParse((string)record["time"], CultureInfo.InvariantCulture,
                         DateTimeStyles.RoundtripKind, out var cdt)
-                        ? cdt.ToLocalTime().ToString("HH:mm")
-                        : "?";
+                        ? cdt.ToLocalTime()
+                        : DateTime.MinValue;
                     charts.Add(new ChartAnalyticsRow(cTime, cBiome, (string)record["room"] ?? "", dur, gain,
                         cChests, (int?)record["monsters"]?["Rare"] ?? 0, (int?)record["monsters"]?["Unique"] ?? 0,
                         cScar, cChaos, cDiv, cEx));
@@ -166,8 +198,8 @@ public partial class DeepwaterEngagementSuite
 
                 var time = DateTime.TryParse((string)record["time"], CultureInfo.InvariantCulture,
                     DateTimeStyles.RoundtripKind, out var dt)
-                    ? dt.ToLocalTime().ToString("HH:mm")
-                    : "?";
+                    ? dt.ToLocalTime()
+                    : DateTime.MinValue;
                 var strat = (string)record["planned"]?["strategy"];
                 var minutes = dur / 60.0;
                 voyages.Add(new ZoneAnalyticsRow(time, string.IsNullOrEmpty(strat) ? "?" : strat,
@@ -181,7 +213,8 @@ public partial class DeepwaterEngagementSuite
             _analyticsVoyages = voyages.Take(15).ToList();
             charts.Reverse();
             _analyticsCharts = charts.Take(30).ToList();
-            _analyticsBiomes = biomes;
+            _analyticsBiomes = biomes.Select(kv => (kv.Key, kv.Value))
+                .OrderByDescending(x => x.Value.Runs).ToList();
             _analyticsChartsSummary = chartCount > 0
                 ? $"solo charts: {chartCount} runs | avg {chartSul / Math.Max(1, chartCount):N0} sulphur | avg {chartSec / Math.Max(1, chartCount)}s"
                 : "solo charts: none";
@@ -216,7 +249,8 @@ public partial class DeepwaterEngagementSuite
         ImGui.TextUnformatted(_analyticsChartsSummary ?? "");
 
         if (_analyticsVoyages is { Count: > 0 } &&
-            ImGui.BeginTable("zoneAnalytics", 14, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
+            ImGui.BeginTable("zoneAnalytics", 14,
+                ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Sortable))
         {
             foreach (var header in new[]
                      {
@@ -228,11 +262,29 @@ public partial class DeepwaterEngagementSuite
             }
 
             ImGui.TableHeadersRow();
+            ApplyTableSort(_analyticsVoyages, col => col switch
+            {
+                0 => (a, b) => a.Time.CompareTo(b.Time),
+                1 => (a, b) => string.Compare(a.Strategy, b.Strategy, StringComparison.OrdinalIgnoreCase),
+                2 => (a, b) => a.Minutes.CompareTo(b.Minutes),
+                3 => (a, b) => a.SulGain.CompareTo(b.SulGain),
+                4 => (a, b) => a.SulPerMin.CompareTo(b.SulPerMin),
+                5 => (a, b) => a.Cells.CompareTo(b.Cells),
+                6 => (a, b) => a.Chests.CompareTo(b.Chests),
+                7 => (a, b) => a.Rares.CompareTo(b.Rares),
+                8 => (a, b) => a.Uniques.CompareTo(b.Uniques),
+                9 => (a, b) => a.Div.CompareTo(b.Div),
+                10 => (a, b) => a.Ex.CompareTo(b.Ex),
+                11 => (a, b) => a.Chaos.CompareTo(b.Chaos),
+                12 => (a, b) => a.Scarabs.CompareTo(b.Scarabs),
+                13 => (a, b) => a.Decks.CompareTo(b.Decks),
+                _ => null,
+            });
             foreach (var r in _analyticsVoyages)
             {
                 ImGui.TableNextRow();
                 ImGui.TableNextColumn();
-                ImGui.TextUnformatted(r.Time);
+                ImGui.TextUnformatted(r.Time.ToString(AnalyticsTimeFormat));
                 ImGui.TableNextColumn();
                 ImGui.TextUnformatted(r.Strategy);
                 ImGui.TableNextColumn();
@@ -269,7 +321,8 @@ public partial class DeepwaterEngagementSuite
         if (ImGui.TreeNode("Solo charts"))
         {
             if (_analyticsBiomes is { Count: > 0 } &&
-                ImGui.BeginTable("chartBiomes", 7, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
+                ImGui.BeginTable("chartBiomes", 7,
+                    ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Sortable))
             {
                 foreach (var header in new[] { "biome", "runs", "avg s", "avg sulphur", "chests/run", "scarab/run", "chaos/run" })
                 {
@@ -277,7 +330,18 @@ public partial class DeepwaterEngagementSuite
                 }
 
                 ImGui.TableHeadersRow();
-                foreach (var (biome, agg) in _analyticsBiomes.OrderByDescending(kv => kv.Value.Runs))
+                ApplyTableSort(_analyticsBiomes, col => col switch
+                {
+                    0 => (a, b) => string.Compare(a.Biome, b.Biome, StringComparison.OrdinalIgnoreCase),
+                    1 => (a, b) => a.Agg.Runs.CompareTo(b.Agg.Runs),
+                    2 => (a, b) => (a.Agg.Dur / Math.Max(1, a.Agg.Runs)).CompareTo(b.Agg.Dur / Math.Max(1, b.Agg.Runs)),
+                    3 => (a, b) => (a.Agg.Sul / Math.Max(1, a.Agg.Runs)).CompareTo(b.Agg.Sul / Math.Max(1, b.Agg.Runs)),
+                    4 => (a, b) => ((double)a.Agg.Chests / Math.Max(1, a.Agg.Runs)).CompareTo((double)b.Agg.Chests / Math.Max(1, b.Agg.Runs)),
+                    5 => (a, b) => ((double)a.Agg.Scarabs / Math.Max(1, a.Agg.Runs)).CompareTo((double)b.Agg.Scarabs / Math.Max(1, b.Agg.Runs)),
+                    6 => (a, b) => ((double)a.Agg.Chaos / Math.Max(1, a.Agg.Runs)).CompareTo((double)b.Agg.Chaos / Math.Max(1, b.Agg.Runs)),
+                    _ => null,
+                });
+                foreach (var (biome, agg) in _analyticsBiomes)
                 {
                     var n = Math.Max(1, agg.Runs);
                     ImGui.TableNextRow();
@@ -301,7 +365,8 @@ public partial class DeepwaterEngagementSuite
             }
 
             if (_analyticsCharts is { Count: > 0 } &&
-                ImGui.BeginTable("chartRuns", 11, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
+                ImGui.BeginTable("chartRuns", 11,
+                    ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Sortable))
             {
                 foreach (var header in new[] { "time", "biome", "room", "s", "sulphur", "chests", "rare", "unique", "scarab", "chaos", "div/ex" })
                 {
@@ -309,11 +374,26 @@ public partial class DeepwaterEngagementSuite
                 }
 
                 ImGui.TableHeadersRow();
+                ApplyTableSort(_analyticsCharts, col => col switch
+                {
+                    0 => (a, b) => a.Time.CompareTo(b.Time),
+                    1 => (a, b) => string.Compare(a.Biome, b.Biome, StringComparison.OrdinalIgnoreCase),
+                    2 => (a, b) => string.Compare(a.Room, b.Room, StringComparison.OrdinalIgnoreCase),
+                    3 => (a, b) => a.DurSec.CompareTo(b.DurSec),
+                    4 => (a, b) => a.SulGain.CompareTo(b.SulGain),
+                    5 => (a, b) => a.Chests.CompareTo(b.Chests),
+                    6 => (a, b) => a.Rares.CompareTo(b.Rares),
+                    7 => (a, b) => a.Uniques.CompareTo(b.Uniques),
+                    8 => (a, b) => a.Scarabs.CompareTo(b.Scarabs),
+                    9 => (a, b) => a.Chaos.CompareTo(b.Chaos),
+                    10 => (a, b) => (a.Div * 1000 + a.Ex).CompareTo(b.Div * 1000 + b.Ex),
+                    _ => null,
+                });
                 foreach (var r in _analyticsCharts)
                 {
                     ImGui.TableNextRow();
                     ImGui.TableNextColumn();
-                    ImGui.TextUnformatted(r.Time);
+                    ImGui.TextUnformatted(r.Time.ToString(AnalyticsTimeFormat));
                     ImGui.TableNextColumn();
                     ImGui.TextUnformatted(r.Biome);
                     ImGui.TableNextColumn();
