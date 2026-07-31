@@ -22,7 +22,11 @@ public record VoyageStrategy(
     string[] RequiredBorderKeys,
     PieceRequirement[] PieceRequirements = null,
     string LayoutHint = null,
-    string[] ReserveKeys = null)
+    string[] ReserveKeys = null,
+    // Regra de layout do site: tiers ordenados de preferência para a ÚNICA peça
+    // travada no centro (ex.: Operative > Diviner > Bottle no Speedrun). Peças
+    // que batem em qualquer tier são da mesma família — só a escolhida entra.
+    string[][] CentrePieceKeys = null)
 {
     public const double MissingRequirementPenalty = 0.2;
 
@@ -59,6 +63,16 @@ public record VoyageStrategy(
                 "Starfish", "Pantheon", "GoldenLanterns", "MonstersPossessed", "RareFracture",
                 "IncreasedRareMonsters", "NoEquipmentDrops", "Wisps", "MagicMonsters",
                 "Strongboxes", "Room:Sea Pillars", "Room:Pelagic Abyss",
+            ],
+            // "ONE Operative in the CENTRE (fallback Diviner/Bottle)": Adjacent-scope
+            // alcança 4 vizinhos só no centro, e a 2ª peça de box é substituta, não
+            // complemento (report de dev 31/07: o solve punha box na borda + PackSize
+            // no centro e escalava Operative E Bottle juntos).
+            CentrePieceKeys:
+            [
+                ["OperativeBox"],
+                ["DivinerBox"],
+                ["LostMessage"],
             ]),
         // milky-meatfish. Regex: "cannot|poss|lantern|pantheon". Site: star/pantheon/
         // lantern/possess 10; fracture 8, voyage:rare 8, adjacent:rare 6; border:rare 9;

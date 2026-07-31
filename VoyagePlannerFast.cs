@@ -12,7 +12,9 @@ namespace DeepwaterEngagementSuite;
 /// por (peça, célula): peça i em c contribui Own×M[c] + Local×ΣM[vizinhos de c] +
 /// Global×ΣM — e os multiplicadores M (borders × P, boostados pela estratégia) são
 /// constantes por célula. Sem cap de pool e sem timeout: ótimo certificado sobre
-/// TODOS os charts. Limitação: ignora LockedPlacements (call site passa []).
+/// TODOS os charts. Suporta LockedPlacements POSICIONAIS: a célula travada só
+/// aceita a peça dona (e ela não vai a outra célula); a rotação da trava é
+/// ignorada — o DP escolhe a melhor por topologia.
 /// </summary>
 public class VoyagePlannerFast
 {
@@ -116,6 +118,20 @@ public class VoyagePlannerFast
             yield break;
         }
 
+        var lockedByCell = new int[Cells];
+        Array.Fill(lockedByCell, -1);
+        var lockedPiece = new bool[n];
+        foreach (var lp in puzzle.LockedPlacements ?? [])
+        {
+            for (var i = 0; i < n; i++)
+            {
+                if (pieces[i].Id != lp.PieceId) continue;
+                lockedByCell[lp.Row * GridSize + lp.Col] = i;
+                lockedPiece[i] = true;
+                break;
+            }
+        }
+
         // Multiplicadores por célula do NOSSO modelo (borders × P, já boostados).
         var m = new double[Cells];
         for (var cell = 0; cell < Cells; cell++)
@@ -187,10 +203,12 @@ public class VoyagePlannerFast
 
             for (var cell = 0; cell < Cells && feasible; cell++)
             {
+                var owner = lockedByCell[cell];
                 var best = double.NegativeInfinity;
                 for (var i = 0; i < n; i++)
                 {
                     if ((eligible[i][cell] >> topo[cell] & 1) == 0) continue;
+                    if (owner >= 0 ? i != owner : lockedPiece[i]) continue;
                     allow[i] |= 1 << cell;
                     if (weight[i][cell] > best) best = weight[i][cell];
                 }

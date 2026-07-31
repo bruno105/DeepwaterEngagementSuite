@@ -79,6 +79,7 @@ public partial class DeepwaterEngagementSuite
     private (string Name, double Score, bool ReqMet)[] _strategyScores = [];
     private volatile int _solveReservedCount;
     private volatile string _solveReserveShortfall;
+    private volatile string _solveCentrePin;
     private readonly Dictionary<string, List<string>> _strategyMissing = new();
     private DateTime _lastStrategyEval = DateTime.MinValue;
     private VoyageStrategy _activeStrategy;
@@ -791,6 +792,51 @@ public partial class DeepwaterEngagementSuite
                     pieces = usable;
                 }
 
+                // Enforcement de layout do site/Milky (report de dev, 31/07): UMA
+                // peça de box — Operative > Diviner > Bottle — TRAVADA no centro.
+                // Adjacent-scope alcança 4 vizinhos só lá, e a 2ª peça de box é
+                // substituta (rouba slot de chart de quant). O maximizador puro
+                // punha o Operative na borda juiceada e PackSize no centro.
+                MapPiece centrePiece = null;
+                _solveCentrePin = null;
+                if (solveStrategy?.CentrePieceKeys is { Length: > 0 } centreTiers)
+                {
+                    bool MatchesTier(MapPiece p, string[] tier) =>
+                        tier.Any(k => p.Modifiers.Any(md => md.Name.Contains(k, StringComparison.OrdinalIgnoreCase)));
+                    bool IsBoxPiece(MapPiece p) => centreTiers.Any(t => MatchesTier(p, t));
+
+                    string pinnedKey = null;
+                    foreach (var tier in centreTiers)
+                    {
+                        centrePiece = pieces
+                            .Where(p => MatchesTier(p, tier))
+                            .OrderByDescending(p => p.OwnModifier + p.LocalModifier + p.GlobalModifier)
+                            .FirstOrDefault();
+                        if (centrePiece != null)
+                        {
+                            pinnedKey = tier[0];
+                            break;
+                        }
+                    }
+
+                    if (centrePiece != null)
+                    {
+                        var kept = pieces.Where(p => p.Id == centrePiece.Id || !IsBoxPiece(p)).ToList();
+                        if (kept.Count < 9)
+                        {
+                            // Pool faminto: sem 9 peças o board não fecha — readmite
+                            // as boxes excedentes por valor (a doutrina cede à física).
+                            kept.AddRange(pieces
+                                .Where(p => p.Id != centrePiece.Id && IsBoxPiece(p))
+                                .OrderByDescending(p => p.OwnModifier + p.LocalModifier + p.GlobalModifier)
+                                .Take(9 - kept.Count));
+                        }
+
+                        pieces = kept;
+                        _solveCentrePin = $"(layout: {pinnedKey} pinned to centre)";
+                    }
+                }
+
                 var maxCharts = Settings.VoyageSettings.SolverMaxCharts.Value;
                 if (maxCharts > 0 && pieces.Count > maxCharts)
                 {
@@ -805,9 +851,19 @@ public partial class DeepwaterEngagementSuite
                         })
                         .Take(maxCharts)
                         .ToList();
+                    if (centrePiece != null && pieces.All(p => p.Id != centrePiece.Id))
+                    {
+                        pieces.Add(centrePiece); // a peça travada nunca sai no cap
+                    }
                 }
 
                 var tileMultiplierArray = ComputeEffectiveMultipliers(tree, solveStrategy);
+
+                // Trava de layout: centro do grid = (1,1) em coords de solver.
+                // Rotation 0 é nominal — o Fast escolhe a rotação por topologia.
+                List<LockedPlacement> locks = centrePiece != null
+                    ? [new LockedPlacement(1, 1, centrePiece.Id, 0)]
+                    : [];
 
                 var timeLimitSetting = Settings.VoyageSettings.SolverTimeLimitSeconds.Value;
                 IEnumerable<VoyageSolutionResult> results;
@@ -817,13 +873,13 @@ public partial class DeepwaterEngagementSuite
                     // filtrado (reserva) e o cap — otimalidade certificada dentro
                     // do pool; com max charts = 0 cobre o estoque inteiro.
                     _voyagePlanner = null;
-                    results = new VoyagePlannerFast().Solve(new VoyagePuzzle(pieces, tileMultiplierArray, []),
+                    results = new VoyagePlannerFast().Solve(new VoyagePuzzle(pieces, tileMultiplierArray, locks),
                         new VoyagePlannerSettings(TimeLimitSeconds: timeLimitSetting));
                 }
                 else
                 {
                     _voyagePlanner = new VoyagePlanner();
-                    results = _voyagePlanner.Solve(new VoyagePuzzle(pieces, tileMultiplierArray, []),
+                    results = _voyagePlanner.Solve(new VoyagePuzzle(pieces, tileMultiplierArray, locks),
                         new VoyagePlannerSettings(TimeLimitSeconds: timeLimitSetting));
                 }
 
@@ -961,6 +1017,12 @@ public partial class DeepwaterEngagementSuite
                     ImGui.SameLine();
                     ImGui.TextColored(Color.Gray.ToImguiVec4(),
                         $"(reserve: {_solveReservedCount} charts protected for other strategies)");
+                }
+
+                if (_solveCentrePin != null)
+                {
+                    ImGui.SameLine();
+                    ImGui.TextColored(Color.Gray.ToImguiVec4(), _solveCentrePin);
                 }
 
                 if (_activeStrategy != null)
