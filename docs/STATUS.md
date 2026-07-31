@@ -8,7 +8,13 @@
 - **Score v2**: `(Próprio + Σ Adjacente(vizinhos) + Voyage) × multBorda × P[r,c]`.
   Escopos Adjacent/Voyage/Self; bioma+explicits no valor próprio; PositionWeights por
   profile (tela: linha 0 = topo; solver: row 0 = baixo — spawn (0,0) bottom-left).
-- **Solver**: primeira solução via ordem por conexões; pool cap top-K (SolverMaxCharts=24).
+- **Solver**: pool cap top-K (SolverMaxCharts=24). Fast (topologias+DP) é o default; o
+  fallback MRV (toggle "Use fast solver" off) foi corrigido em 31/07/2026: seed exato por
+  topologias (reusa tabelas do Fast; suporta LockedPlacements) + B&B com bounds de
+  relaxação de atribuição admissíveis e strong branching; _bestScore inicia em -inf
+  (scores negativos valem). Empata com o Fast em 480 pools aleatórios do harness
+  (subótimo/sem-solução do relatório original era timeout por bound frouxo, não
+  inadmissibilidade — o bound antigo era admissível, só inútil).
 - **Estratégias** (VoyageStrategy.DocStrategies): as 6 do site one-more-map, pesos
   verificados contra o bundle 2026-07-30 — Speedrun/Meatfish/DivineBorder/DivineBoxes
   (cutedog)/Ethereal (⚠ deprecado)/AlcGo (refugo, sem requisitos) — boosts por

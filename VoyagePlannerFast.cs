@@ -28,8 +28,10 @@ public class VoyagePlannerFast
         (Direction.Right, 0, 1),
     ];
 
-    private static readonly int[] InGrid = BuildInGrid();
-    private static readonly int[][] Topologies = BuildTopologies();
+    // internal: o VoyagePlanner (fallback) usa as mesmas tabelas na fase de seed —
+    // combinatória pura do grid 3×3, sem lógica de score.
+    internal static readonly int[] InGrid = BuildInGrid();
+    internal static readonly int[][] Topologies = BuildTopologies();
 
     private static int[] BuildInGrid()
     {
