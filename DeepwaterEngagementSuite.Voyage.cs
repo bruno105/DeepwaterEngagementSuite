@@ -31,6 +31,7 @@ public partial class DeepwaterEngagementSuite
     private string _lastBorderKey;
     private (string Name, double Score, bool ReqMet)[] _strategyScores = [];
     private volatile int _solveReservedCount;
+    private volatile string _solveReserveShortfall;
     private readonly Dictionary<string, List<string>> _strategyMissing = new();
     private DateTime _lastStrategyEval = DateTime.MinValue;
     private VoyageStrategy _activeStrategy;
@@ -398,9 +399,18 @@ public partial class DeepwaterEngagementSuite
             var inTop = topChartSet.Contains(i);
             Graphics.DrawTextWithBackground($"{value:F0}", chartTopLeft + new Vector2(0, 12),
                 inTop ? Color.LightGreen : Color.Gray, Color.Black);
-            if (inTop && chartEntries[i].ExplicitCount == 0)
+            var craftShown = inTop && chartEntries[i].ExplicitCount == 0;
+            if (craftShown)
             {
                 Graphics.DrawTextWithBackground("craft", chartTopLeft + new Vector2(0, 24), Color.Yellow, Color.Black);
+            }
+
+            // Peça exclusiva/âncora de estratégia: NÃO queimar em Speedrun/AlcGo
+            // (a reserva dura do Solve respeita; o overlay te mostra o porquê).
+            if (PieceOwnerTag(piece) is { } ownerTag)
+            {
+                Graphics.DrawTextWithBackground(ownerTag,
+                    chartTopLeft + new Vector2(0, craftShown ? 36 : 24), Color.Cyan, Color.Black);
             }
         }
 
@@ -408,6 +418,41 @@ public partial class DeepwaterEngagementSuite
         {
             ShowVoyageOptimizerWindow(tree,tiles);
         }
+    }
+
+    // Peças exclusivas/âncora de estratégias, p/ o overlay do pool (ordem =
+    // especificidade; primeiro match vence). Espelha ReserveKeys + PieceRequirements.
+    private static readonly (string Key, string Tag)[] PieceOwnerTags =
+    [
+        ("Room:Pelagic Abyss", "DIVBOX"),
+        ("Room:Sea Pillars", "MEAT/DIV"),
+        ("AdjacentWisps2", "MEAT/ETH"),
+        ("AdjacentWisps", "ETH"),
+        ("AdjacentStarfish", "MEAT"),
+        ("AdjacentPantheon", "MEAT"),
+        ("AdjacentGoldenLanterns", "MEAT/ETH"),
+        ("VoyageMonstersPossessed", "MEAT"),
+        ("VoyageNoEquipmentDrops", "MEAT"),
+        ("VoyageRareFracture", "MEAT"),
+        ("IncreasedRareMonsters", "DIV"),
+        ("AdjacentOperativeBox", "SPEED"),
+        ("AdjacentDivinerBox", "SPEED"),
+        ("AdjacentLostMessage", "SPEED"),
+        ("AdjacentArcanistBox", "DIVBOX"),
+        ("AdjacentStrongboxes", "DIV"),
+    ];
+
+    private static string PieceOwnerTag(MapPiece piece)
+    {
+        foreach (var (key, tag) in PieceOwnerTags)
+        {
+            if (piece.Modifiers.Any(m => m.Name.Contains(key, StringComparison.OrdinalIgnoreCase)))
+            {
+                return tag;
+            }
+        }
+
+        return null;
     }
 
     // Texto de UI seguro: TextUnformatted (o '%' de "110%+" vira format string no
@@ -668,20 +713,35 @@ public partial class DeepwaterEngagementSuite
                 var pieces = basePieces.Select(p => solveStrategy?.BoostPiece(p) ?? p).ToList();
 
                 // Reserva (site one-more-map): estratégias de queima não escalam
-                // peças das outras — a menos que falte chart p/ fechar o board
-                // (backfill com as reservadas de MENOR valor até 12 = 9 + folga
-                // de conexões).
+                // peças das outras. Reserva DURA por padrão: sem 9 peças livres,
+                // NÃO há solução válida (não queima a peça do Meatfish só porque o
+                // AlcGo pontua mais). O toggle "Allow burning reserves" devolve o
+                // backfill antigo (readmite as reservadas de menor valor até 12).
                 _solveReservedCount = 0;
+                _solveReserveShortfall = null;
                 if (solveStrategy?.ReserveKeys is { Length: > 0 })
                 {
                     var usable = pieces.Where(p => !solveStrategy.IsReserved(p)).ToList();
-                    const int minPool = 12;
-                    if (usable.Count < minPool)
+                    var reservedCount = pieces.Count - usable.Count;
+                    if (Settings.VoyageSettings.AllowBurningReserves.Value)
                     {
-                        usable.AddRange(pieces
-                            .Where(solveStrategy.IsReserved)
-                            .OrderBy(p => p.OwnModifier + p.LocalModifier + p.GlobalModifier)
-                            .Take(minPool - usable.Count));
+                        const int minPool = 12;
+                        if (usable.Count < minPool)
+                        {
+                            usable.AddRange(pieces
+                                .Where(solveStrategy.IsReserved)
+                                .OrderBy(p => p.OwnModifier + p.LocalModifier + p.GlobalModifier)
+                                .Take(minPool - usable.Count));
+                        }
+                    }
+                    else if (usable.Count < 9 && reservedCount > 0)
+                    {
+                        _solveReserveShortfall =
+                            $"Sem solucao SEM queimar reserva: {usable.Count} charts livres + {reservedCount} reservados " +
+                            $"p/ outras estrategias (faltam {9 - usable.Count} livres). Farme/compre charts ou ligue 'Allow burning reserves'.";
+                        _result = new VoyageSolutionResult([], 0, 0);
+                        _voyageSolving = false;
+                        return;
                     }
 
                     _solveReservedCount = pieces.Count - usable.Count;
@@ -944,6 +1004,10 @@ public partial class DeepwaterEngagementSuite
             else if (_voyageTimedOut)
             {
                 ImGui.TextColored(Color.Orange.ToImguiVec4(), "Time limit reached - no valid solution found.");
+            }
+            else if (_solveReserveShortfall is { } shortfall)
+            {
+                WrappedText(Color.Orange, shortfall);
             }
             else
             {

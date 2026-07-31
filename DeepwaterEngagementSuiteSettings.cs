@@ -336,6 +336,9 @@ public class VoyageSettings
 
     [Menu("Use fast solver (exact)", "Solver exato por topologias+DP (port do upstream, validado no harness: 26/26 pools, nunca pior que o MRV — que foi subótimo em 17/26). Ignora o time limit; pode subir o max charts (0 = pool inteiro). Desligar volta ao MRV antigo.")]
     public ToggleNode UseFastSolver { get; set; } = new ToggleNode(true);
+
+    [Menu("Allow burning reserves", "Permite o Solve usar peças reservadas p/ outras estratégias quando faltar chart livre (backfill). Desligado = reserva dura: sem 9 peças livres, sem solução válida.")]
+    public ToggleNode AllowBurningReserves { get; set; } = new ToggleNode(false);
     public RangeNode<float> BorderHighlightThreshold { get; set; } = new RangeNode<float>(1.01f, 0, 10);
     public RangeNode<float> ChartHighlightThreshold { get; set; } = new RangeNode<float>(1.0f, 0, 10);
 
