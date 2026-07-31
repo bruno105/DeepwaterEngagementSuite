@@ -114,6 +114,7 @@ public partial class DeepwaterEngagementSuite
         ["ClamTreasureChest"] = 30,
         ["UniqueWeaponChest"] = 30,
         ["UniqueArmourChest"] = 30,
+        ["Strongbox"] = 55, // box real spawnada (entidade StrongBoxes, não marker deepwater)
         // Tiles de peças do plano (objetivos sintéticos) — fora da estratégia dona valem pouco.
         ["StarfishTile"] = 40,
         ["PantheonTile"] = 40,
@@ -129,6 +130,7 @@ public partial class DeepwaterEngagementSuite
         ["Speedrun"] = new Dictionary<string, int>
         {
             ["CurrencyTreasureChestOpulent"] = 105,
+            ["Strongbox"] = 100, // box REAL vence o tile sintético — abrir o que está vivo
             ["CurrencyTreasureChest"] = 100,
             ["BoxTile"] = 95, // tiles dos charts de box: é lá que as boxes spawnam
             ["BottledItemChest"] = 95,
@@ -153,6 +155,7 @@ public partial class DeepwaterEngagementSuite
         ["DivineBorder"] = new Dictionary<string, int>
         {
             ["DivinePieceTile"] = 105, // o tile do Divine É o farm inteiro
+            ["Strongbox"] = 90,
             ["FeederTile"] = 85,
             ["GoldenLantern"] = 70,
             ["Unrevealed"] = 50,
@@ -160,6 +163,7 @@ public partial class DeepwaterEngagementSuite
         ["DivineBoxes"] = new Dictionary<string, int>
         {
             ["DivinePieceTile"] = 105,
+            ["Strongbox"] = 95, // as boxes SÃO os 7 div/cada — abrir no tile do Divine
             ["FeederTile"] = 90,
             ["GoldenLantern"] = 70,
             ["Unrevealed"] = 50,
@@ -321,6 +325,29 @@ public partial class DeepwaterEngagementSuite
                     }
                 }
             }
+        }
+
+        // Strongboxes REAIS carregadas (spawnadas pelos box charts): o marker cache
+        // só vê chests deepwater — sem isso o Pilot mandava ao BoxTile distante com
+        // uma box viva do lado. Prioridade acima do tile sintético no Speedrun.
+        try
+        {
+            foreach (var chest in GameController.EntityListWrapper.ValidEntitiesByType[EntityType.Chest])
+            {
+                if (chest is not { IsValid: true } ||
+                    !chest.Path.Contains("StrongBox", StringComparison.OrdinalIgnoreCase) ||
+                    chest.GetComponent<Chest>()?.IsOpened == true)
+                {
+                    continue;
+                }
+
+                kindCounts["Strongbox"] = kindCounts.GetValueOrDefault("Strongbox") + 1;
+                objectives.Add(("Strongbox", chest.GridPosNum, EffectivePriority("Strongbox")));
+            }
+        }
+        catch
+        {
+            // lista de chests ilegível em transição
         }
 
         var lanternsLeft = kindCounts.GetValueOrDefault("LanternReplenishEncounter");
