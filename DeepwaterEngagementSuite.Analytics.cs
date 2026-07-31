@@ -250,12 +250,13 @@ public partial class DeepwaterEngagementSuite
 
         if (_analyticsVoyages is { Count: > 0 } &&
             ImGui.BeginTable("zoneAnalytics", 14,
-                ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Sortable))
+                ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Sortable |
+                ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingFixedFit))
         {
             foreach (var header in new[]
                      {
-                         "time", "strategy", "min", "sulphur", "sul/min", "cells",
-                         "chests", "rare", "unique", "div", "ex", "chaos", "scarab", "deck",
+                         "time", "strategy", "dur (min)", "sulphur", "sulphur/min", "cells",
+                         "chests", "rare", "unique", "divine", "exalted", "chaos", "scarabs", "decks",
                      })
             {
                 ImGui.TableSetupColumn(header);
@@ -322,9 +323,10 @@ public partial class DeepwaterEngagementSuite
         {
             if (_analyticsBiomes is { Count: > 0 } &&
                 ImGui.BeginTable("chartBiomes", 7,
-                    ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Sortable))
+                    ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Sortable |
+                    ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingFixedFit))
             {
-                foreach (var header in new[] { "biome", "runs", "avg s", "avg sulphur", "chests/run", "scarab/run", "chaos/run" })
+                foreach (var header in new[] { "biome", "runs", "avg dur (s)", "avg sulphur", "chests/run", "scarabs/run", "chaos/run" })
                 {
                     ImGui.TableSetupColumn(header);
                 }
@@ -366,9 +368,10 @@ public partial class DeepwaterEngagementSuite
 
             if (_analyticsCharts is { Count: > 0 } &&
                 ImGui.BeginTable("chartRuns", 11,
-                    ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Sortable))
+                    ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Sortable |
+                    ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingFixedFit))
             {
-                foreach (var header in new[] { "time", "biome", "room", "s", "sulphur", "chests", "rare", "unique", "scarab", "chaos", "div/ex" })
+                foreach (var header in new[] { "time", "biome", "room", "dur (s)", "sulphur", "chests", "rare", "unique", "scarabs", "chaos", "divine/exalted" })
                 {
                     ImGui.TableSetupColumn(header);
                 }
