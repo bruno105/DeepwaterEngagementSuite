@@ -382,7 +382,7 @@ public partial class DeepwaterEngagementSuite
         var hoverTooltipRect = GetHoverTooltipRect();
         for (int i = 0; i < charts.Count; i++)
         {
-            if (hoverTooltipRect.Intersects(charts[i].GetClientRectCache))
+            if (OverlapsTooltip(charts[i].GetClientRectCache, hoverTooltipRect))
             {
                 continue; // não desenhar por cima do tooltip do chart em hover
             }

@@ -50,7 +50,7 @@ public partial class DeepwaterEngagementSuite
 
             var (color, tag) = ClassifyChart(entity, chart);
             var rect = invItem.GetClientRectCache;
-            if (tooltipRect.Intersects(rect))
+            if (OverlapsTooltip(rect, tooltipRect))
             {
                 continue; // não desenhar por cima do tooltip (padrão NinjaPrice/Beasts)
             }
@@ -122,18 +122,55 @@ public partial class DeepwaterEngagementSuite
         return (Color.OrangeRed, null); // Alc & Go / filler
     }
 
-    /// <summary>Rect do tooltip do item em hover (vazio se nenhum) — para não desenhar por cima.</summary>
+    /// <summary>
+    /// Rect do tooltip do item em hover (vazio se nenhum) — para não desenhar por
+    /// cima. Só vale se o tooltip está VISÍVEL e o rect é plausível: o elemento
+    /// âncora às vezes reporta uma faixa gigante (apagava a fileira inteira do
+    /// inventário mesmo sem tooltip sobre ela).
+    /// </summary>
     private RectangleF GetHoverTooltipRect()
     {
         try
         {
-            return GameController.IngameState.UIHover?.AsObject<HoverItemIcon>()?.Tooltip?.GetClientRect()
-                   ?? new RectangleF(0, 0, 0, 0);
+            var tooltip = GameController.IngameState.UIHover?.AsObject<HoverItemIcon>()?.Tooltip;
+            if (tooltip is not { IsVisible: true })
+            {
+                return new RectangleF(0, 0, 0, 0);
+            }
+
+            var rect = tooltip.GetClientRect();
+            var win = GameController.Window.GetWindowRectangleTimeCache;
+            if (rect.Width > win.Width * 0.6f || rect.Height > win.Height * 0.8f)
+            {
+                return new RectangleF(0, 0, 0, 0); // rect âncora, não a caixa visível
+            }
+
+            return rect;
         }
         catch
         {
             return new RectangleF(0, 0, 0, 0);
         }
+    }
+
+    /// <summary>Sobreposição REAL (>20% da área do item) — encostar na borda não apaga o frame.</summary>
+    private static bool OverlapsTooltip(RectangleF item, RectangleF tooltip)
+    {
+        if (tooltip.Width <= 0 || tooltip.Height <= 0)
+        {
+            return false;
+        }
+
+        var ix = Math.Max(item.Left, tooltip.Left);
+        var iy = Math.Max(item.Top, tooltip.Top);
+        var ax = Math.Min(item.Right, tooltip.Right);
+        var ay = Math.Min(item.Bottom, tooltip.Bottom);
+        if (ax <= ix || ay <= iy)
+        {
+            return false;
+        }
+
+        return (ax - ix) * (ay - iy) > 0.2f * item.Width * item.Height;
     }
 
     /// <summary>Soma os valores de stat cujo Key contenha o termo, em TODOS os mods do item.</summary>
