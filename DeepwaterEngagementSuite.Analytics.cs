@@ -123,8 +123,14 @@ public partial class DeepwaterEngagementSuite
     }
 
     // Desenhado DENTRO do settings do plugin (CustomNode) — não é janela própria.
+    // Atrás de um CollapsingHeader (">") p/ não ocupar o menu o tempo todo.
     private void DrawZoneAnalyticsInline()
     {
+        if (!ImGui.CollapsingHeader("Zone analytics"))
+        {
+            return;
+        }
+
         if (_analyticsVoyages == null)
         {
             LoadZoneAnalytics();

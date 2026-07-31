@@ -50,9 +50,7 @@ public class DeepwaterEngagementSuiteSettings : ISettings
     public RangeNode<int> WorldIconSize { get; set; } = new RangeNode<int>(50, 25, 200);
     public RangeNode<int> MapIconSize { get; set; } = new RangeNode<int>(30, 15, 200);
 
-    [JsonIgnore]
-    [Menu("Zone analytics", "Recent voyage stats from zone_stats.jsonl (sul/min, cells, div/ex/chaos)")]
-    public CustomNode ZoneAnalyticsNode { get; set; } = new CustomNode();
+    [JsonIgnore] public CustomNode ZoneAnalyticsNode { get; set; } = new CustomNode();
 
     public CurrencyReminderSettings CurrencyReminderSettings { get; set; } = new CurrencyReminderSettings();
     public BubbleSettings BubbleSettings { get; set; } = new BubbleSettings();
