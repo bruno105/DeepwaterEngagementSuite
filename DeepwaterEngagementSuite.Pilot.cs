@@ -582,7 +582,12 @@ public partial class DeepwaterEngagementSuite
         var nothingWorthTheWalk = false;
         if (next is { } best && Score(best) <= 0)
         {
-            var bestExpansion = reachable
+            // Expansão busca em OBJECTIVES (não em reachable): tile do plano é
+            // alcançável por construção — blacklist de tile significa rota LENTA,
+            // não tile impossível, e com lanterns livres insistir no stub vence
+            // extrair com células virgens (o EXTRACT falso de 31/07 nasceu de 4
+            // tiles blacklistados em sequência esvaziando o pool de expansão).
+            var bestExpansion = objectives
                 .Where(o => IsExpansion(o))
                 .OrderByDescending(Score)
                 .Cast<(string Label, Vector2 Pos, int Prio)?>()
@@ -636,10 +641,16 @@ public partial class DeepwaterEngagementSuite
 
             // Re-pede a rota quando o alvo muda OU quando a última tentativa falhou
             // (alvo inandável, pathfinding ainda não pronto) — senão fica preso na reta.
+            // PACIÊNCIA por distância (telemetria 31/07): rota de 1.000un+ demora
+            // mais que 2s para calcular; contar "ainda calculando" como falha
+            // blacklistou os 4 tiles restantes em sequência e disparou EXTRACT
+            // com mapa por explorar. Falha só conta após 4s (7s para alvos longe).
             var targetChanged = Vector2.Distance(_pilotRouteTarget, obj.Pos) >= 40;
+            var sinceRequest = (DateTime.UtcNow - _lastRouteRequest).TotalSeconds;
+            var routePatience = Vector2.Distance(_playerGridPos, obj.Pos) > 800 ? 7.0 : 4.0;
             if (settings.UseRadarRoute.Value &&
-                (targetChanged || _pilotRoute == null) &&
-                (DateTime.UtcNow - _lastRouteRequest).TotalSeconds >= 2)
+                ((targetChanged && sinceRequest >= 2) ||
+                 (!targetChanged && _pilotRoute == null && sinceRequest >= routePatience)))
             {
                 if (!targetChanged)
                 {
