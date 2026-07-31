@@ -23,6 +23,17 @@ public partial class DeepwaterEngagementSuite
     private static readonly HashSet<string> PilotBuffKinds =
         ["GoldenLantern", "LanternReplenishEncounter", "AltarCrab", "AltarOctopus"];
 
+    // Peças-chave do PLANO viram objetivos sintéticos no tile onde foram colocadas:
+    // entidades distantes não carregam até chegarmos perto, então sem isso o Pilot
+    // só "descobre" o chart de GL no canto oposto quando já é tarde (decay). O kind
+    // reusa a tabela de prioridades (GL herda 110×decay no Meatfish).
+    private static readonly (string ModKey, string Kind)[] PlannedPieceObjectives =
+    [
+        ("AdjacentGoldenLanterns", "GoldenLantern"),
+        ("AdjacentStarfish", "StarfishTile"),
+        ("AdjacentPantheon", "PantheonTile"),
+    ];
+
     private List<Vector2i> _pilotRoute;
     private Vector2 _pilotRouteTarget;
     private CancellationTokenSource _pilotRouteCts;
@@ -55,6 +66,9 @@ public partial class DeepwaterEngagementSuite
         ["ClamTreasureChest"] = 30,
         ["UniqueWeaponChest"] = 30,
         ["UniqueArmourChest"] = 30,
+        // Tiles de peças do plano (objetivos sintéticos) — fora do Meatfish valem pouco.
+        ["StarfishTile"] = 40,
+        ["PantheonTile"] = 40,
     };
 
     private static readonly Dictionary<string, Dictionary<string, int>> PilotStrategyOverrides = new()
@@ -75,6 +89,10 @@ public partial class DeepwaterEngagementSuite
         {
             ["GoldenLantern"] = 110,
             ["LanternReplenishEncounter"] = 100,
+            // Starfish/Pantheon SEM decay: matar os giga-rares depois dos stacks é
+            // até melhor (rarity aplica no kill) — só as lanterns têm pressa.
+            ["StarfishTile"] = 80,
+            ["PantheonTile"] = 75,
             ["AllflameEmbersChest"] = 70,
         },
         ["DivineBorder"] = new Dictionary<string, int>
@@ -214,6 +232,21 @@ public partial class DeepwaterEngagementSuite
                     var target = SnapToWalkable(center) ?? center;
                     var prio = 40 + (int)(60 * _plannedMults[r, c] / maxPlanned);
                     objectives.Add(($"Tile ({r},{c}) x{_plannedMults[r, c]:F1}", target, prio));
+
+                    // Peça-chave do plano nesta célula: objetivo sintético com a
+                    // prioridade do kind (GL puxa CEDO, com decay; some quando a
+                    // célula é visitada — aí as entidades reais assumem).
+                    if (_plannedPieceMods?[r, c] is { } placedMods)
+                    {
+                        foreach (var (modKey, kind) in PlannedPieceObjectives)
+                        {
+                            if (placedMods.Any(m => m.Contains(modKey, StringComparison.OrdinalIgnoreCase)))
+                            {
+                                objectives.Add(($"{kind} tile ({r},{c})", target, EffectivePriority(kind)));
+                                kindCounts[kind] = kindCounts.GetValueOrDefault(kind) + 1;
+                            }
+                        }
+                    }
                 }
             }
         }

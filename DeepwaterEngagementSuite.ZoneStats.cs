@@ -182,6 +182,10 @@ public partial class DeepwaterEngagementSuite
     private double[,] _plannedMults;
     private string _plannedStrategy;
     private double _plannedScore;
+    // Mods de cada peça colocada, por célula do board — o Pilot usa p/ criar
+    // objetivos sintéticos (ex.: tile do chart de GL puxa a rota CEDO, antes das
+    // lanterns carregarem como entidades).
+    private List<string>[,] _plannedPieceMods;
 
     private void ZoneStatsOnMonsterAdded(Entity entity)
     {

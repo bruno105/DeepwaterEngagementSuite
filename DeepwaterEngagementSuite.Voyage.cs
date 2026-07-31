@@ -770,6 +770,15 @@ public partial class DeepwaterEngagementSuite
                 _plannedStrategy = _activeStrategy?.Name ?? "Base";
                 _plannedScore = sol.TotalScore;
                 _plannedMults = ComputeEffectiveMultipliers(tree, _activeStrategy);
+                _plannedPieceMods = new List<string>[3, 3];
+                for (var pr = 0; pr < 3; pr++)
+                {
+                    for (var pc = 0; pc < 3; pc++)
+                    {
+                        _plannedPieceMods[pr, pc] =
+                            sol.Grid[pr, pc]?.Piece?.Modifiers.Select(m => m.Name).ToList() ?? [];
+                    }
+                }
             }
         }
 
