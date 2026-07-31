@@ -118,6 +118,39 @@ public partial class DeepwaterEngagementSuite
     // varrer antes de expandir.
     private const int PilotSweepMinPriority = 40;
 
+    private Vector2? _extractionPos;
+    private DateTime _extractionRead = DateTime.MinValue;
+
+    /// <summary>Ponto de extração da voyage (entidade SummonExtractionObject),
+    /// para a seta de fim de run. Cache de 2s — varre a lista inteira de entidades.</summary>
+    private Vector2? FindExtractionPoint()
+    {
+        if ((DateTime.UtcNow - _extractionRead).TotalSeconds < 2)
+        {
+            return _extractionPos;
+        }
+
+        _extractionRead = DateTime.UtcNow;
+        _extractionPos = null;
+        try
+        {
+            foreach (var e in GameController.EntityListWrapper.OnlyValidEntities)
+            {
+                if (e?.Path?.Contains("ExtractionObject", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    _extractionPos = e.GridPosNum;
+                    break;
+                }
+            }
+        }
+        catch
+        {
+            // lista ilegível em transição
+        }
+
+        return _extractionPos;
+    }
+
     private static readonly Dictionary<string, int> PilotBasePriority = new()
     {
         ["GoldenLantern"] = 96,
@@ -547,8 +580,13 @@ public partial class DeepwaterEngagementSuite
             }
             else
             {
-                next = null;
                 nothingWorthTheWalk = true;
+                // Fim de run de verdade: em vez de seta apagada, apontar para a
+                // EXTRAÇÃO (medido 31/07: rede varrida, extração a 88un e a seta
+                // antiga cruzando o mapa atrás de chart não revelado).
+                next = FindExtractionPoint() is { } extraction
+                    ? ("EXTRACT", extraction, 200)
+                    : null;
             }
         }
 
@@ -868,10 +906,11 @@ public partial class DeepwaterEngagementSuite
 
             ImGui.TextColored(settings.ObjectiveColor.Value.ToImguiVec4(), nextLine);
         }
-        else if (nothingWorthTheWalk)
+
+        if (nothingWorthTheWalk)
         {
             ImGui.TextColored(Color.OrangeRed.ToImguiVec4(),
-                "Next: nothing worth the walk left - EXTRACT!");
+                "Map swept, nothing worth the walk - EXTRACT!");
         }
 
         ImGui.End();
