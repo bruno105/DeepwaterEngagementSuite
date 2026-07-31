@@ -437,6 +437,7 @@ public partial class DeepwaterEngagementSuite : BaseSettingsPlugin<DeepwaterEnga
         {
             DrawGridTracker();
             DrawCurrencyReminder();
+            DrawZoneAnalytics(); // antes do gate de Handler: útil no hideout também
         }
 
         if (Handler == null)
