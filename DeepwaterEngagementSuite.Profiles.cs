@@ -105,6 +105,10 @@ public partial class DeepwaterEngagementSuite
         {
             vs.BiomeWeights.Content.Add(bw);
         }
+
+        // Peças cacheadas carregam os PESOS do profile anterior — sem isso o painel
+        // de estratégias e o Solve ficam ~9% defasados até fechar a janela.
+        _chartValueCache.Clear();
     }
 
     private void OnProfileSelected(string name)

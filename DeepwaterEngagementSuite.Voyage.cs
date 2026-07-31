@@ -451,20 +451,52 @@ public partial class DeepwaterEngagementSuite
         // Stats rolados (quant/sulphur/pack) como pseudo-mods Self — explicits fora da
         // config entram com peso 0, então o craft não contava no valor próprio. Escala
         // per-N do solver one-more-map (quantity/6, sulphur/8, packsize/8); alvo dos
-        // boosts self:* das estratégias (Speedrun quant 110%+, Pelagic pack alto...).
-        var quantStat = SumStatValues(itemMods, "quantity");
+        // boosts self:* das estratégias. PASSADA ÚNICA: cada leitura de StatNames/Key
+        // é memória do jogo — três SumStatValues por chart custavam segundos no pool.
+        var quantStat = 0;
+        var sulphurStat = 0;
+        var packStat = 0;
+        foreach (var mod in itemMods?.ItemMods ?? [])
+        {
+            var statNames = mod.ModRecord?.StatNames;
+            if (statNames == null)
+            {
+                continue;
+            }
+
+            for (var si = 0; si < statNames.Length && si < mod.Values.Count; si++)
+            {
+                var key = statNames[si]?.Key;
+                if (string.IsNullOrEmpty(key))
+                {
+                    continue;
+                }
+
+                if (key.Contains("quantity", StringComparison.OrdinalIgnoreCase))
+                {
+                    quantStat += mod.Values[si];
+                }
+                else if (key.Contains("resource", StringComparison.OrdinalIgnoreCase))
+                {
+                    sulphurStat += mod.Values[si];
+                }
+                else if (key.Contains("pack", StringComparison.OrdinalIgnoreCase))
+                {
+                    packStat += mod.Values[si];
+                }
+            }
+        }
+
         if (quantStat != 0)
         {
             modifiers.Add(new Modifier("Stat:Quantity", quantStat / 6.0, ModScope.Self));
         }
 
-        var sulphurStat = SumStatValues(itemMods, "resource");
         if (sulphurStat != 0)
         {
             modifiers.Add(new Modifier("Stat:Resource", sulphurStat / 8.0, ModScope.Self));
         }
 
-        var packStat = SumStatValues(itemMods, "pack");
         if (packStat != 0)
         {
             modifiers.Add(new Modifier("Stat:PackSize", packStat / 8.0, ModScope.Self));
@@ -605,19 +637,35 @@ public partial class DeepwaterEngagementSuite
             _voyageTimedOut = false;
             _voyageStopwatch = System.Diagnostics.Stopwatch.StartNew();
             var solveStrategy = _activeStrategy;
-            _run = Task.Run(() =>
+            // Peças construídas AQUI (thread de render, via cache): reconstruir da
+            // memória do jogo dentro da task relia ModRecord/StatNames de todos os
+            // mods (~5s p/ 60 charts). O Id precisa refletir o índice ATUAL do pool
+            // (PlacePieces clica availableCharts[Id]) — cache pode ter Id antigo.
+            var basePieces = new List<MapPiece>();
             {
                 var i = 0;
-                var pieces = new List<MapPiece>();
                 foreach (var chart in GetAvailableCharts())
                 {
-                    if (BuildMapPiece(chart, i) is { } mp)
+                    var addr = chart.Address;
+                    if (!_chartValueCache.TryGetValue(addr, out var entry))
                     {
-                        pieces.Add(solveStrategy?.BoostPiece(mp) ?? mp);
+                        entry = (BuildMapPiece(chart, i),
+                            chart.Item.GetComponent<Mods>()?.ExplicitMods?.Count ?? 0);
+                        _chartValueCache[addr] = entry;
+                    }
+
+                    if (entry.Piece is { } cached)
+                    {
+                        basePieces.Add(cached.Id == i ? cached : cached with { Id = i });
                     }
 
                     i++;
                 }
+            }
+
+            _run = Task.Run(() =>
+            {
+                var pieces = basePieces.Select(p => solveStrategy?.BoostPiece(p) ?? p).ToList();
 
                 // Reserva (site one-more-map): estratégias de queima não escalam
                 // peças das outras — a menos que falte chart p/ fechar o board
