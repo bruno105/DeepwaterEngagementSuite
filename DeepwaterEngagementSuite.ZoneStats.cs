@@ -10,6 +10,7 @@ using ExileCore.PoEMemory.Components;
 using ExileCore.PoEMemory.MemoryObjects;
 using ExileCore.Shared.Enums;
 using ExileCore.Shared.Helpers;
+using Vector2 = System.Numerics.Vector2;
 
 namespace DeepwaterEngagementSuite;
 
@@ -46,6 +47,81 @@ public partial class DeepwaterEngagementSuite
     private DateTime _statsBiomeAt = DateTime.MinValue;
     private string _statsRoom;
     private readonly HashSet<string> _statsPathSample = new(StringComparer.Ordinal);
+
+    // ── Telemetria de decisão do Pilot (diagnóstico de "mudança de ideia") ──
+    // Cada troca de alvo vira um evento classificado: "reached" (jogador chegou),
+    // "gone" (alvo sumiu — coletado/célula visitada/expirou) ou "abandoned"
+    // (alvo ainda vivo e LONGE quando a seta trocou — a mudança de ideia real).
+    private int _pilotSwitches;
+    private int _pilotReachedCount;
+    private int _pilotGoneCount;
+    private int _pilotAbandonedCount;
+    private bool _pilotHasPrev;
+    private string _pilotPrevLabel;
+    private Vector2 _pilotPrevTargetPos;
+    private DateTime _pilotPrevSince;
+    private readonly List<string> _pilotEvents = new();
+
+    private void ZoneStatsPilotTargetTick(
+        (string Label, Vector2 Pos, int Prio)? next,
+        List<(string Label, Vector2 Pos, int Prio)> objectives,
+        Vector2 playerPos)
+    {
+        if (next is not { } cur)
+        {
+            _pilotHasPrev = false;
+            return;
+        }
+
+        if (!_pilotHasPrev)
+        {
+            _pilotHasPrev = true;
+            _pilotPrevLabel = cur.Label;
+            _pilotPrevTargetPos = cur.Pos;
+            _pilotPrevSince = DateTime.UtcNow;
+            return;
+        }
+
+        // Mesma identidade do alvo da histerese (40un) — só troca real conta.
+        if (Vector2.Distance(cur.Pos, _pilotPrevTargetPos) < 40)
+        {
+            _pilotPrevLabel = cur.Label;
+            return;
+        }
+
+        var prevDist = Vector2.Distance(playerPos, _pilotPrevTargetPos);
+        var stillThere = objectives.Any(o => Vector2.Distance(o.Pos, _pilotPrevTargetPos) < 40);
+        string reason;
+        if (prevDist < 60)
+        {
+            reason = "reached";
+            _pilotReachedCount++;
+        }
+        else if (!stillThere)
+        {
+            reason = "gone";
+            _pilotGoneCount++;
+        }
+        else
+        {
+            reason = "abandoned";
+            _pilotAbandonedCount++;
+        }
+
+        _pilotSwitches++;
+        if (_pilotEvents.Count < 150)
+        {
+            var t = (int)(DateTime.UtcNow - _statsAreaStart).TotalSeconds;
+            var held = (int)(DateTime.UtcNow - _pilotPrevSince).TotalSeconds;
+            _pilotEvents.Add(
+                $"{{\"t\":{t},\"held\":{held},\"from\":\"{_pilotPrevLabel?.Replace("\"", "")}\"," +
+                $"\"to\":\"{cur.Label?.Replace("\"", "")}\",\"prevDist\":{(int)prevDist},\"reason\":\"{reason}\"}}");
+        }
+
+        _pilotPrevLabel = cur.Label;
+        _pilotPrevTargetPos = cur.Pos;
+        _pilotPrevSince = DateTime.UtcNow;
+    }
 
     // Tokens de bioma/sala nos paths das entidades (chart runs rodam na área genérica
     // DeepwaterEncounter; a identidade real está nos assets da sala).
@@ -554,6 +630,10 @@ public partial class DeepwaterEngagementSuite
                 sb.Append("],\"cellMonsters\":[");
                 sb.Append(string.Join(",", _cellMonstersSeen));
                 sb.Append(']');
+                sb.Append($",\"pilot\":{{\"switches\":{_pilotSwitches},\"reached\":{_pilotReachedCount},");
+                sb.Append($"\"gone\":{_pilotGoneCount},\"abandoned\":{_pilotAbandonedCount},\"events\":[");
+                sb.Append(string.Join(",", _pilotEvents));
+                sb.Append("]}");
                 if (_plannedMults != null)
                 {
                     var mults = new List<string>();
@@ -611,6 +691,12 @@ public partial class DeepwaterEngagementSuite
         Array.Clear(_cellSulphurGain);
         Array.Clear(_cellChestsOpened);
         Array.Clear(_cellMonstersSeen);
+        _pilotSwitches = 0;
+        _pilotReachedCount = 0;
+        _pilotGoneCount = 0;
+        _pilotAbandonedCount = 0;
+        _pilotHasPrev = false;
+        _pilotEvents.Clear();
         try
         {
             var area = GameController.Area.CurrentArea;

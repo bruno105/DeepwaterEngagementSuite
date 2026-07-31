@@ -592,6 +592,11 @@ public partial class DeepwaterEngagementSuite
 
         _pilotStickyPos = next?.Pos;
 
+        // Telemetria: cada troca de alvo vira evento no zone_stats, classificada
+        // como reached/gone/abandoned — "abandoned" é a mudança de ideia que
+        // queremos medir e reduzir.
+        ZoneStatsPilotTargetTick(next, objectives, _playerGridPos);
+
         // Seta/rota para o próximo objetivo (mundo + mapa). Com o Radar instalado, a
         // rota segue o terreno andável (Radar.LookForRoute via PluginBridge).
         if (settings.ShowObjectiveArrow && next is { } obj)
