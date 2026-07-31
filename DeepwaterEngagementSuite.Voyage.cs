@@ -737,8 +737,8 @@ public partial class DeepwaterEngagementSuite
                     else if (usable.Count < 9 && reservedCount > 0)
                     {
                         _solveReserveShortfall =
-                            $"Sem solucao SEM queimar reserva: {usable.Count} charts livres + {reservedCount} reservados " +
-                            $"p/ outras estrategias (faltam {9 - usable.Count} livres). Farme/compre charts ou ligue 'Allow burning reserves'.";
+                            $"No solution WITHOUT burning reserves: {usable.Count} free charts + {reservedCount} reserved " +
+                            $"for other strategies ({9 - usable.Count} more free needed). Farm/buy charts or enable 'Allow burning reserves'.";
                         _result = new VoyageSolutionResult([], 0, 0);
                         _voyageSolving = false;
                         return;
@@ -877,7 +877,7 @@ public partial class DeepwaterEngagementSuite
             if (_strategyScores.Length > 0)
             {
                 var bestName = _strategyScores.MaxBy(x => x.Score).Name;
-                ImGui.Text("Estrategias:");
+                ImGui.Text("Strategies:");
                 for (var i = 0; i < _strategyScores.Length; i++)
                 {
                     var (name, score, reqMet) = _strategyScores[i];
@@ -887,7 +887,7 @@ public partial class DeepwaterEngagementSuite
                     }
 
                     var color = name == bestName ? Color.LightGreen : Color.Gray;
-                    ImGui.TextColored(color.ToImguiVec4(), $"{name}: {score:F0}{(reqMet ? "" : " (sem border)")}");
+                    ImGui.TextColored(color.ToImguiVec4(), $"{name}: {score:F0}{(reqMet ? "" : " (no border)")}");
                 }
 
                 var current = Settings.VoyageSettings.SelectedStrategy.Value;
@@ -912,12 +912,12 @@ public partial class DeepwaterEngagementSuite
 
                 _activeStrategy = ResolveStrategy(Settings.VoyageSettings.SelectedStrategy.Value is { Length: > 0 } v ? v : "Auto");
                 ImGui.SameLine();
-                ImGui.Text($"usando: {_activeStrategy?.Name ?? "Base"}");
+                ImGui.Text($"using: {_activeStrategy?.Name ?? "Base"}");
                 if (_solveReservedCount > 0)
                 {
                     ImGui.SameLine();
                     ImGui.TextColored(Color.Gray.ToImguiVec4(),
-                        $"(reserva: {_solveReservedCount} charts protegidos p/ outras strats)");
+                        $"(reserve: {_solveReservedCount} charts protected for other strategies)");
                 }
 
                 if (_activeStrategy != null)
@@ -925,7 +925,7 @@ public partial class DeepwaterEngagementSuite
                     if (_strategyMissing.GetValueOrDefault(_activeStrategy.Name) is { Count: > 0 } missing)
                     {
                         WrappedText(Color.Yellow,
-                            $"FALTAM pecas ({_activeStrategy.Name}): {string.Join(", ", missing)} - speedrun boxes enquanto isso");
+                            $"MISSING pieces ({_activeStrategy.Name}): {string.Join(", ", missing)} - speedrun boxes meanwhile");
                     }
 
                     if (_activeStrategy.LayoutHint is { Length: > 0 } hint)
@@ -967,12 +967,12 @@ public partial class DeepwaterEngagementSuite
             else if (sulphur is { } s && s < nextCost)
             {
                 ImGui.TextColored(Color.Yellow.ToImguiVec4(),
-                    $"Borders: R={ratio:F2} - REROLL quando puder (sulphur: {s:N0}/{nextCost:N0})");
+                    $"Borders: R={ratio:F2} - REROLL when you can (sulphur: {s:N0}/{nextCost:N0})");
             }
             else
             {
                 ImGui.TextColored(Color.OrangeRed.ToImguiVec4(),
-                    $"Borders: R={ratio:F2} - REROLL (proximo: {nextCost:N0} sulphur)");
+                    $"Borders: R={ratio:F2} - REROLL (next: {nextCost:N0} sulphur)");
             }
 
             if (sulphur != null && (keep || sulphur >= nextCost))
@@ -981,7 +981,7 @@ public partial class DeepwaterEngagementSuite
                 ImGui.Text($"(sulphur: {sulphur:N0})");
             }
 
-            ImGui.Text($"Rerolls nesta board: {_rerollCount}");
+            ImGui.Text($"Rerolls this board: {_rerollCount}");
             ImGui.SameLine();
             if (ImGui.SmallButton("+")) _rerollCount++;
             ImGui.SameLine();

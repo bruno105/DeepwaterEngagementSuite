@@ -221,7 +221,7 @@ public partial class DeepwaterEngagementSuite
             if (ImGui.Begin("Voyage Pilot", ImGuiWindowFlags.AlwaysAutoResize))
             {
                 ImGui.TextColored(Color.Gray.ToImguiVec4(),
-                    $"{strategyName} - fora das bolhas (no barco?). Sem objetivos ativos.");
+                    $"{strategyName} - outside the bubbles (on the boat?). No active objectives.");
             }
 
             ImGui.End();
@@ -555,26 +555,26 @@ public partial class DeepwaterEngagementSuite
         var overTime = extractLimit > 0 && elapsed.TotalMinutes > extractLimit;
         ImGui.TextColored((overTime ? Color.OrangeRed : Color.LightGreen).ToImguiVec4(),
             $"{strategyName}  {(int)elapsed.TotalMinutes:D2}:{elapsed.Seconds:D2}" +
-            (extractLimit > 0 ? $" / {extractLimit}min{(overTime ? "  EXTRAIA!" : "")}" : ""));
+            (extractLimit > 0 ? $" / {extractLimit}min{(overTime ? "  EXTRACT!" : "")}" : ""));
 
         var behavior = strategyName switch
         {
-            "Speedrun" => "Tiles de BOX primeiro, juice com Alch/Scour/Ex, abra tudo. Extraia no limite.",
-            "Meatfish" when !meatfishKillPhase => $"FASE 1: colete os lanterns ({lanternsLeft} restantes)",
-            "Meatfish" => "FASE 2: full clear de rares/uniques (Starfish/Pantheon). Extraia por ultimo.",
+            "Speedrun" => "BOX tiles first, juice with Alch/Scour/Ex, open everything. Extract at the limit.",
+            "Meatfish" when !meatfishKillPhase => $"PHASE 1: collect the lanterns ({lanternsLeft} left)",
+            "Meatfish" => "PHASE 2: full clear rares/uniques (Starfish/Pantheon). Extract last.",
             "DivineBorder" or "DivineBoxes" when _plannedDivineCell >= 0 =>
-                $"Tile do Divine = ({_plannedDivineCell / 3},{_plannedDivineCell % 3}): rares LA valem 1 div cada. Feeders adjacentes.",
-            "DivineBorder" or "DivineBoxes" => "Full-clear de rares na regiao do border Divine.",
-            "Ethereal" => "Wisps nas laterais cedo, lanterns nos cantos, mate os packs magicos.",
-            "AlcGo" => "Queima local: lanterns, clique tudo por perto, sem desvios. Saia rapido.",
-            _ => "Siga os marcadores; abra o que tiver valor.",
+                $"Divine tile = ({_plannedDivineCell / 3},{_plannedDivineCell % 3}): rares THERE drop 1 div each. Feeders adjacent.",
+            "DivineBorder" or "DivineBoxes" => "Full clear rares around the Divine border.",
+            "Ethereal" => "Wisps on the sides early, lanterns in the corners, kill the magic packs.",
+            "AlcGo" => "Local burn: lanterns, click everything nearby, no detours. Leave fast.",
+            _ => "Follow the markers; open whatever has value.",
         };
         ImGui.TextUnformatted(behavior);
 
         var currentCell = GridCellIndex(_playerGridPos);
         if (currentCell >= 0)
         {
-            var cellText = $"Celula: ({currentCell / 3},{currentCell % 3})";
+            var cellText = $"Cell: ({currentCell / 3},{currentCell % 3})";
             if (_plannedMults != null)
             {
                 cellText += $"  mult x{_plannedMults[currentCell / 3, currentCell % 3]:F2}";
@@ -587,7 +587,7 @@ public partial class DeepwaterEngagementSuite
         if (maxLanterns > 0 && PlacedLanternCount >= maxLanterns * 0.9)
         {
             ImGui.TextColored(Color.OrangeRed.ToImguiVec4(),
-                "Lanterns no fim - planeje o RETORNO (apagam em ordem reversa)");
+                "Lanterns almost done - plan the RETURN (they extinguish in reverse order)");
         }
 
         int? sulphur = null;
@@ -625,13 +625,13 @@ public partial class DeepwaterEngagementSuite
                 .OrderByDescending(kv => Priority(kv.Key))
                 .Take(4)
                 .Select(kv => $"{kv.Key}:{kv.Value}"));
-            ImGui.TextUnformatted($"Restam: {summary}");
+            ImGui.TextUnformatted($"Remaining: {summary}");
         }
 
         if (next is { } n)
         {
             ImGui.TextColored(settings.ObjectiveColor.Value.ToImguiVec4(),
-                $"Proximo: {n.Label} ({Vector2.Distance(_playerGridPos, n.Pos):F0})");
+                $"Next: {n.Label} ({Vector2.Distance(_playerGridPos, n.Pos):F0})");
         }
 
         ImGui.End();

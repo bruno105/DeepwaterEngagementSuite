@@ -331,13 +331,13 @@ public class VoyageSettings
     [Menu("Solver time limit (seconds)", "Max time the solver runs before returning the best solution found so far. 0 = no limit.")]
     public RangeNode<int> SolverTimeLimitSeconds { get; set; } = new RangeNode<int>(5, 1, 120);
 
-    [Menu("Solver max charts", "Considera apenas os N melhores charts do estoque no solve (por peso). 0 = sem limite.")]
+    [Menu("Solver max charts", "Only the N best charts (by weight) are considered by the solver. 0 = no limit.")]
     public RangeNode<int> SolverMaxCharts { get; set; } = new RangeNode<int>(24, 0, 200);
 
-    [Menu("Use fast solver (exact)", "Solver exato por topologias+DP (port do upstream, validado no harness: 26/26 pools, nunca pior que o MRV — que foi subótimo em 17/26). Ignora o time limit; pode subir o max charts (0 = pool inteiro). Desligar volta ao MRV antigo.")]
+    [Menu("Use fast solver (exact)", "Exact topology+DP solver (upstream port, harness-validated: 26/26 pools, never worse than the old MRV — which was suboptimal in 17/26). Ignores the time limit; you can raise max charts (0 = whole pool). Turning it off falls back to the old MRV.")]
     public ToggleNode UseFastSolver { get; set; } = new ToggleNode(true);
 
-    [Menu("Allow burning reserves", "Permite o Solve usar peças reservadas p/ outras estratégias quando faltar chart livre (backfill). Desligado = reserva dura: sem 9 peças livres, sem solução válida.")]
+    [Menu("Allow burning reserves", "Lets the solver use pieces reserved for other strategies when free charts run short (backfill). Off = hard reserve: fewer than 9 free pieces means no valid solution.")]
     public ToggleNode AllowBurningReserves { get; set; } = new ToggleNode(false);
     public RangeNode<float> BorderHighlightThreshold { get; set; } = new RangeNode<float>(1.01f, 0, 10);
     public RangeNode<float> ChartHighlightThreshold { get; set; } = new RangeNode<float>(1.0f, 0, 10);

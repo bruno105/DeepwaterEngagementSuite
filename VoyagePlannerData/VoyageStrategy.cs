@@ -52,7 +52,7 @@ public record VoyageStrategy(
             [
                 new PieceRequirement("1x Operative/Diviner/Bottle", 1, ["OperativeBox", "DivinerBox", "LostMessage"]),
             ],
-            "Milky: UM Operative no CENTRO (fallback Diviner/Bottle) | quant 110%+ ANTES de rodar | maiores quants nas 4 laterais | Alch/Scour/Ex p/ juicar boxes | border Filthscrabble (polvo ~4k sulphur): chart de mais sulphur NELE",
+            "Milky: ONE Operative in the CENTRE (fallback Diviner/Bottle) | 110%+ quant BEFORE running | highest quants on the 4 sides | Alch/Scour/Ex to juice boxes | Filthscrabble border (~4k sulphur octopus): highest-sulphur chart ON it",
             // Site: "never burns your juice pieces" — reservadas p/ as outras strats.
             ReserveKeys:
             [
@@ -84,7 +84,7 @@ public record VoyageStrategy(
                 new PieceRequirement("1x Possessed", 1, ["MonstersPossessed"]),
                 new PieceRequirement("1x No-Equipment/Fracture", 1, ["NoEquipmentDrops", "RareFracture"]),
             ],
-            "Layout Milky: Starfish SÓ topo/baixo-meio | Pantheon SÓ dir-meio | GL centro | Pillars cantos | coletar TODOS os lanterns (~280% quant, 840 rarity)"),
+            "Milky layout: Starfish ONLY top/bottom-middle | Pantheon ONLY right-middle | GL centre | Pillars corners | collect ALL lanterns (~280% quant, 840 rarity)"),
         // divine-border-rares (Milky). Regex: "rare monsters in all voy|strongbox".
         // Site: rare 10 (adj+voy+border), star 8, box 8 (genérico — specialty boxes são
         // do cutedog), possess/fracture 6, border:divine 10. Pillar PINADO no tile do
@@ -105,7 +105,7 @@ public record VoyageStrategy(
                 new PieceRequirement("3x Starfish/Strongbox", 3, ["Starfish", "Strongboxes"]),
                 new PieceRequirement("5x Increased Rares", 5, ["IncreasedRareMonsters"]),
             ],
-            "Milky: Pillar NO tile do Divine | feeders '+5 Strongboxes' adjacentes (rolar boxes p/ Stream of Monsters +4 / of Rarity +3 = 7 div/box; um +5 ≈ 35 div) | Starfish = feeder reserva"),
+            "Milky: Pillar ON the Divine tile | '+5 Strongboxes' feeders adjacent (roll boxes for Stream of Monsters +4 / of Rarity +3 = 7 div/box; one +5 chart ~ 35 div) | Starfish = backup feeder"),
         // cutedog-divine-boxes. Regex de compra: 120%+ quant. Site: voyage:rare 10,
         // adjacent:rare 8, border:rare/divine 10, box 9, specialty boxes 8, self:pack 6.
         // Pelagic Abyss pack-size alto no tile do Divine (+80, packsize per 8);
@@ -122,11 +122,11 @@ public record VoyageStrategy(
             ],
             ["RareMonsterDivine"],
             [
-                new PieceRequirement("1x Pelagic Abyss (pack alto)", 1, ["Room:Pelagic Abyss"]),
-                new PieceRequirement("3x Strongbox (qualquer)", 3, ["Strongboxes", "DivinerBox", "ArcanistBox", "OperativeBox"]),
+                new PieceRequirement("1x Pelagic Abyss (high pack)", 1, ["Room:Pelagic Abyss"]),
+                new PieceRequirement("3x Strongbox (any type)", 3, ["Strongboxes", "DivinerBox", "ArcanistBox", "OperativeBox"]),
                 new PieceRequirement("5x Increased Rares (voyage)", 5, ["VoyageIncreasedRareMonsters"]),
             ],
-            "cutedog: Pelagic pack-size ALTO no tile do Divine | 3× boxes (qualquer tipo) adjacentes | rolar boxes: '3 additional Rares'=3 div + 'Stream of Monsters'=4 (ambos=7) | comprar charts 120%+ quant no trade"),
+            "cutedog: HIGH pack-size Pelagic on the Divine tile | 3x boxes (any type) adjacent | roll boxes: '3 additional Rares'=3 div + 'Stream of Monsters'=4 (both=7) | buy 120%+ quant charts on trade"),
         // milky-ethereal — DEPRECADO pelo próprio Milky (Palsteron: ~5 div). Mantido
         // como referência, igual ao site. Site: wisps 10, minmagic 10, magic 9,
         // lantern 8, border:minmagic 8; NoEquip pesa MAIS que no Meatfish.
@@ -144,7 +144,7 @@ public record VoyageStrategy(
                 new PieceRequirement("4x Wisps", 4, ["Wisps"]),
                 new PieceRequirement("3x Golden Lanterns", 3, ["GoldenLanterns"]),
             ],
-            "⚠ DEPRECADO (retornos fracos; Milky migrou p/ Meatfish) | Wisps nas 4 laterais | GL nos cantos | Cross no centro (3 Corner, 4 T, 1 Cross, 1 Straight = 11 conexões) | usar Infested Bathysphere"),
+            "! DEPRECATED (weak returns; Milky moved to Meatfish) | Wisps on the 4 sides | GL in the corners | Cross in the centre (3 Corner, 4 T, 1 Cross, 1 Straight = 11 connections) | use Infested Bathysphere"),
         // alc-and-go. Queima os charts que NENHUMA outra estratégia quer: sulphur,
         // loot espalhado e encontros aleatórios. Sem requisitos nem gates — vence no
         // Auto justamente quando o pool é refugo (as outras levam penalidade 0.2).
@@ -155,7 +155,7 @@ public record VoyageStrategy(
             [],
             [],
             null,
-            "Queimar o refugo: 3 pistas ligadas por baixo | Alc & Go, colocar lanterns, clicar tudo, sair | NÃO queimar peças das outras strats (Starfish/Pantheon/GL/Possessed/Fracture/IncRares/NoEquip/Wisps/Boxes/Pillar/Pelagic)",
+            "Burn the leftovers: 3 lanes joined along the bottom | Alc & Go, place lanterns, click everything, leave | do NOT burn other strategies' pieces (Starfish/Pantheon/GL/Possessed/Fracture/IncRares/NoEquip/Wisps/Boxes/Pillar/Pelagic)",
             // Reserva do site: juice pieces + boxes de centro + pillar/pelagic.
             ReserveKeys:
             [
