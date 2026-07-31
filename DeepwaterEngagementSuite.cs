@@ -87,7 +87,10 @@ public partial class DeepwaterEngagementSuite : BaseSettingsPlugin<DeepwaterEnga
         Settings.VoyageSettings.ProfileSelector.Values = Settings.VoyageSettings.Profiles.Select(p => p.Name).ToList();
         if (Settings.VoyageSettings.Profiles.Count > 0)
         {
-            ApplyProfile(Settings.VoyageSettings.Profiles[0].Name);
+            // Aplica o profile SELECIONADO (persistido; LoadProfiles já validou com
+            // fallback p/ o primeiro) — Profiles[0] é alfabético e voltava p/ Default
+            // em todo reload.
+            ApplyProfile(Settings.VoyageSettings.ProfileSelector.Value);
         }
         Settings.VoyageSettings.ProfileRenameNode.DrawDelegate = DrawProfileRenameNode;
         RegisterHotkey(Settings.PlannerSettings.StartSearchHotkey);
@@ -98,8 +101,10 @@ public partial class DeepwaterEngagementSuite : BaseSettingsPlugin<DeepwaterEnga
 
     public override void OnSaveSettings()
     {
+        // Só o profile ATIVO (o Sync já grava o arquivo dele). SaveProfiles()
+        // reescrevia TODOS com a cópia em memória do último load — clobberava
+        // edições feitas em disco nos profiles não-ativos.
         SyncCurrentProfileToMemory();
-        SaveProfiles();
     }
 
     private static void RegisterHotkey(HotkeyNodeV2 hotkey)
