@@ -565,6 +565,23 @@ public partial class DeepwaterEngagementSuite
             .Cast<(string Label, Vector2 Pos, int Prio)?>()
             .FirstOrDefault();
 
+        // LIXO nunca pré-empta exploração (telemetria 31/07): no fim da run um
+        // MapsChest (prio 20) a 182un venceu o tile (0,2) x2.6 a 777un por DOIS
+        // pontos, e a célula inteira ficou por explorar. Coleta abaixo do corte
+        // da varredura só leva a seta quando não há expansão que se pague.
+        if (next is { } lowValue && !IsExpansion(lowValue) && lowValue.Prio < PilotSweepMinPriority)
+        {
+            var expansionAlt = pool
+                .Where(IsExpansion)
+                .OrderByDescending(Score)
+                .Cast<(string Label, Vector2 Pos, int Prio)?>()
+                .FirstOrDefault();
+            if (expansionAlt is { } alt && Score(alt) > 0)
+            {
+                next = alt;
+            }
+        }
+
         // Alvo atual só cede para um desafiante com folga de margem E depois de
         // segurar o tempo mínimo — ou quando some do pool (coletado/blacklist/
         // célula visitada/troca de doutrina), aí a entrega é imediata.
