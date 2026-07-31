@@ -27,6 +27,10 @@ public partial class DeepwaterEngagementSuite
     private Vector2 _pilotRouteTarget;
     private CancellationTokenSource _pilotRouteCts;
     private DateTime _lastRouteRequest = DateTime.MinValue;
+    private int _pilotRouteFails;
+    private readonly Dictionary<(int X, int Y), DateTime> _pilotUnreachable = new();
+
+    private static (int X, int Y) QuantizeTarget(Vector2 pos) => ((int)(pos.X / 20), (int)(pos.Y / 20));
 
     private static readonly Dictionary<string, int> PilotBasePriority = new()
     {
@@ -236,9 +240,25 @@ public partial class DeepwaterEngagementSuite
             }
         }
 
-        var next = objectives
-            .OrderByDescending(o => o.Prio)
-            .ThenBy(o => Vector2.Distance(_playerGridPos, o.Pos))
+        // Alvos que falharam rota 3x ficam na blacklist por 60s — objetivo em chart
+        // inalcançável (outro componente do terreno) prendia a seta numa reta eterna
+        // mesmo havendo objetivos bons ao lado. E prioridade agora paga pedágio de
+        // distância (-3 por 100 unidades): chest decente perto > jackpot do outro
+        // lado do mapa.
+        var utcNow = DateTime.UtcNow;
+        foreach (var expired in _pilotUnreachable.Where(kv => kv.Value <= utcNow).Select(kv => kv.Key).ToList())
+        {
+            _pilotUnreachable.Remove(expired);
+        }
+
+        var reachable = objectives.Where(o => !_pilotUnreachable.ContainsKey(QuantizeTarget(o.Pos))).ToList();
+        if (reachable.Count == 0)
+        {
+            reachable = objectives; // tudo em blacklist: melhor apontar algo que nada
+        }
+
+        var next = reachable
+            .OrderByDescending(o => o.Prio - Vector2.Distance(_playerGridPos, o.Pos) * 0.03)
             .Cast<(string Label, Vector2 Pos, int Prio)?>()
             .FirstOrDefault();
 
@@ -256,6 +276,21 @@ public partial class DeepwaterEngagementSuite
                 (targetChanged || _pilotRoute == null) &&
                 (DateTime.UtcNow - _lastRouteRequest).TotalSeconds >= 2)
             {
+                if (targetChanged)
+                {
+                    _pilotRouteFails = 0;
+                }
+                else
+                {
+                    // Retry do MESMO alvo = a tentativa anterior não produziu rota.
+                    _pilotRouteFails++;
+                    if (_pilotRouteFails >= 3)
+                    {
+                        _pilotUnreachable[QuantizeTarget(obj.Pos)] = DateTime.UtcNow.AddSeconds(60);
+                        _pilotRouteFails = 0;
+                    }
+                }
+
                 _lastRouteRequest = DateTime.UtcNow;
                 var lookForRoute = GameController.PluginBridge
                     .GetMethod<Func<Vector2, Action<List<Vector2i>>, CancellationToken, Task>>("Radar.LookForRoute");
@@ -285,6 +320,7 @@ public partial class DeepwaterEngagementSuite
                              Vector2.Distance(_pilotRouteTarget, obj.Pos) < 40;
             if (routeValid)
             {
+                _pilotRouteFails = 0;
                 var step = Math.Max(1, route.Count / 80);
                 for (var i = step; i < route.Count; i += step)
                 {
