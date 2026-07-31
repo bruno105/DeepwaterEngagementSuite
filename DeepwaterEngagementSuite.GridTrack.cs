@@ -330,6 +330,8 @@ public partial class DeepwaterEngagementSuite
         _gridSize = default;
         _regionComputed = false;
         _terrainComponents = null;
+        _pilotUnreachable.Clear();
+        _pilotRouteFailCounts.Clear();
         _pathBreadcrumbs.Clear();
         Array.Clear(_cellSeconds);
         Array.Clear(_cellFirstOrder);

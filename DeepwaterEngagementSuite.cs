@@ -329,6 +329,8 @@ public partial class DeepwaterEngagementSuite : BaseSettingsPlugin<DeepwaterEnga
     public override Job Tick()
     {
         GridTrackTick();
+        // Antes do gate: o "Collect Loot" da voyage pode ser claimado no hideout.
+        ZoneStatsScanRewards();
         if (Handler == null)
         {
             return null;

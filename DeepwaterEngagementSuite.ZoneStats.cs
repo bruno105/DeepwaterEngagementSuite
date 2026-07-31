@@ -344,7 +344,6 @@ public partial class DeepwaterEngagementSuite
 
         ZoneStatsScanPreloads();
         ZoneStatsScanGroundLoot();
-        ZoneStatsScanRewards();
     }
 
     private void ZoneStatsScanGroundLoot()
@@ -395,6 +394,10 @@ public partial class DeepwaterEngagementSuite
         }
     }
 
+    private DateTime _statsRewardsLastVisible = DateTime.MinValue;
+
+    // Chamado ANTES do gate de Handler (o "Collect Loot" pode ser aberto no hideout,
+    // depois do flush do registro da voyage — 3 voyages ficaram com rewards vazias).
     private void ZoneStatsScanRewards()
     {
         if ((DateTime.UtcNow - _statsLastRewardScan).TotalMilliseconds < 500)
@@ -407,8 +410,19 @@ public partial class DeepwaterEngagementSuite
         {
             if (GameController.IngameState.IngameUi.VoyageRewardWindow is not { IsValid: true, IsVisible: true } rewardWindow)
             {
+                // Janela fechou com snapshot pendente: registro PRÓPRIO na hora
+                // (kind=rewards) — a análise junta com a voyage anterior por tempo.
+                if (_statsRewards.Count > 0 &&
+                    _statsRewardsLastVisible != DateTime.MinValue &&
+                    (DateTime.UtcNow - _statsRewardsLastVisible).TotalSeconds > 3)
+                {
+                    WriteRewardsRecord();
+                }
+
                 return;
             }
+
+            _statsRewardsLastVisible = DateTime.UtcNow;
 
             var snapshot = new Dictionary<string, int>();
             foreach (var tab in rewardWindow.ItemContainer?.Inventories ?? [])
@@ -438,6 +452,40 @@ public partial class DeepwaterEngagementSuite
         {
             // janela em transição; tenta no próximo scan
         }
+    }
+
+    private void WriteRewardsRecord()
+    {
+        try
+        {
+            var sb = new StringBuilder(256);
+            sb.Append('{');
+            sb.Append($"\"time\":\"{DateTime.UtcNow:O}\",");
+            sb.Append("\"kind\":\"rewards\",");
+            sb.Append("\"items\":{");
+            var first = true;
+            foreach (var kv in _statsRewards)
+            {
+                if (!first)
+                {
+                    sb.Append(',');
+                }
+
+                first = false;
+                sb.Append($"\"{kv.Key.Replace("\"", "")}\":{kv.Value}");
+            }
+
+            sb.Append("}}");
+            File.AppendAllText(Path.Combine(ConfigDirectory, "zone_stats.jsonl"), sb + Environment.NewLine);
+        }
+        catch
+        {
+            // sem acesso ao arquivo; o snapshot fica para a próxima tentativa
+            return;
+        }
+
+        _statsRewards = new Dictionary<string, int>();
+        _statsRewardsLastVisible = DateTime.MinValue;
     }
 
     private void FinalizeZoneStats()
@@ -520,6 +568,12 @@ public partial class DeepwaterEngagementSuite
 
                 sb.Append('}');
                 File.AppendAllText(Path.Combine(ConfigDirectory, "zone_stats.jsonl"), sb + Environment.NewLine);
+                if (_statsRewards.Count > 0)
+                {
+                    // Rewards entraram inline neste registro — consumidas.
+                    _statsRewards = new Dictionary<string, int>();
+                    _statsRewardsLastVisible = DateTime.MinValue;
+                }
             }
         }
         catch (Exception ex)
@@ -531,7 +585,9 @@ public partial class DeepwaterEngagementSuite
         _statsSeenChests.Clear();
         _statsMonsters.Clear();
         _statsChests.Clear();
-        _statsRewards = new Dictionary<string, int>();
+        // _statsRewards NÃO reseta aqui: o snapshot precisa sobreviver à troca de
+        // instância (claim no hideout) — ele se limpa ao gravar (WriteRewardsRecord
+        // ou inline no registro da voyage).
         _statsSulphurStart = null;
         _statsSulphurLast = null;
         _statsSulphurMax = null;

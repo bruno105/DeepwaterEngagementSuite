@@ -84,7 +84,9 @@ public partial class DeepwaterEngagementSuite
     private Vector2 _pilotRouteTarget;
     private CancellationTokenSource _pilotRouteCts;
     private DateTime _lastRouteRequest = DateTime.MinValue;
-    private int _pilotRouteFails;
+    // Falhas de rota POR ALVO: um contador global zerava quando a seleção alternava
+    // entre dois alvos ruins e o blacklist nunca disparava.
+    private readonly Dictionary<(int X, int Y), int> _pilotRouteFailCounts = new();
     private readonly Dictionary<(int X, int Y), DateTime> _pilotUnreachable = new();
 
     private static (int X, int Y) QuantizeTarget(Vector2 pos) => ((int)(pos.X / 20), (int)(pos.Y / 20));
@@ -382,7 +384,14 @@ public partial class DeepwaterEngagementSuite
                 }
 
                 var targetComponent = ComponentAt(o.Pos);
-                return targetComponent == 0 || targetComponent == playerComponent;
+                if (targetComponent == 0)
+                {
+                    // Componente desconhecido: perto tudo bem (decoração ao lado,
+                    // anda-se até encostar); LONGE é quase sempre void intransponível.
+                    return Vector2.Distance(_playerGridPos, o.Pos) < 200;
+                }
+
+                return targetComponent == playerComponent;
             })
             .ToList();
         if (reachable.Count == 0)
@@ -410,18 +419,19 @@ public partial class DeepwaterEngagementSuite
                 (targetChanged || _pilotRoute == null) &&
                 (DateTime.UtcNow - _lastRouteRequest).TotalSeconds >= 2)
             {
-                if (targetChanged)
-                {
-                    _pilotRouteFails = 0;
-                }
-                else
+                if (!targetChanged)
                 {
                     // Retry do MESMO alvo = a tentativa anterior não produziu rota.
-                    _pilotRouteFails++;
-                    if (_pilotRouteFails >= 3)
+                    var failedTarget = QuantizeTarget(obj.Pos);
+                    var fails = _pilotRouteFailCounts.GetValueOrDefault(failedTarget) + 1;
+                    if (fails >= 2)
                     {
-                        _pilotUnreachable[QuantizeTarget(obj.Pos)] = DateTime.UtcNow.AddSeconds(60);
-                        _pilotRouteFails = 0;
+                        _pilotUnreachable[failedTarget] = DateTime.UtcNow.AddSeconds(90);
+                        _pilotRouteFailCounts.Remove(failedTarget);
+                    }
+                    else
+                    {
+                        _pilotRouteFailCounts[failedTarget] = fails;
                     }
                 }
 
@@ -454,7 +464,7 @@ public partial class DeepwaterEngagementSuite
                              Vector2.Distance(_pilotRouteTarget, obj.Pos) < 40;
             if (routeValid)
             {
-                _pilotRouteFails = 0;
+                _pilotRouteFailCounts.Remove(QuantizeTarget(obj.Pos));
                 var step = Math.Max(1, route.Count / 80);
                 for (var i = step; i < route.Count; i += step)
                 {
