@@ -123,6 +123,10 @@ public class PlannerSettings
         [IconPickerIndex.ClamTreasureChest] = new ChestSettings { Weight = 2 },
         [IconPickerIndex.LanternReplenishEncounter] = new ChestSettings { Weight = 30 },
         [IconPickerIndex.CurrencyTreasureChestOpulent] = new ChestSettings { Weight = 50 },
+        // Sem lucro na prática — abaixo do peso neutro (1) p/ o planner de bolhas
+        // preferir qualquer outro alvo no desempate.
+        [IconPickerIndex.MapsChest] = new ChestSettings { Weight = 0.3f },
+        [IconPickerIndex.GoldTreasureChest] = new ChestSettings { Weight = 0.2f },
     };
 
     public HotkeyNodeV2 StartSearchHotkey { get; set; } = new HotkeyNodeV2(Keys.None);

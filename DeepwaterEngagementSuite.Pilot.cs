@@ -38,12 +38,14 @@ public partial class DeepwaterEngagementSuite
         ["BottledItemChest"] = 70,
         ["ScarabChest"] = 65,
         ["StackedDecksChest"] = 65,
-        ["MapsChest"] = 60,
         ["AllflameEmbersChest"] = 55,
         ["LanternReplenishEncounter"] = 55,
         ["CursedDucatDrop"] = 45,
         ["IzaroObject"] = 40,
-        ["GoldTreasureChest"] = 35,
+        // Gold pile e Maps chest: praticamente sem lucro (feedback do Bruno 31/07) —
+        // só valem quando estão no caminho, nunca como desvio.
+        ["MapsChest"] = 20,
+        ["GoldTreasureChest"] = 10,
         ["AltarCrab"] = 35,
         ["AltarOctopus"] = 35,
         ["ClamTreasureChest"] = 30,
@@ -61,8 +63,8 @@ public partial class DeepwaterEngagementSuite
             ["ScarabChest"] = 90,
             ["StackedDecksChest"] = 90,
             ["Unrevealed"] = 85,
-            ["MapsChest"] = 80,
-            ["GoldTreasureChest"] = 20,
+            ["MapsChest"] = 25,
+            ["GoldTreasureChest"] = 8,
             ["ClamTreasureChest"] = 15,
         },
         ["Meatfish"] = new Dictionary<string, int>
