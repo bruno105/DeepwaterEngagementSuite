@@ -208,11 +208,10 @@ public partial class DeepwaterEngagementSuite
             return;
         }
 
-        if (_cachedEntities.Count == 0 && _pointerEntities.Count == 0)
-        {
-            return;
-        }
-
+        // Sem gate por caches de entidades: após um Reload Plugins os caches nascem
+        // vazios (entidades já carregadas não re-disparam EntityAdded) e o painel
+        // sumia no início da voyage — e ele é útil mesmo sem markers (fase, tiles
+        // do plano, strongboxes). O call site já garante Handler != null.
         var strategyName = _activeStrategy?.Name ?? "Base";
 
         var inField = IsPlayerInField(_playerGridPos);
