@@ -50,6 +50,7 @@ public class DeepwaterEngagementSuiteSettings : ISettings
     public RangeNode<int> WorldIconSize { get; set; } = new RangeNode<int>(50, 25, 200);
     public RangeNode<int> MapIconSize { get; set; } = new RangeNode<int>(30, 15, 200);
 
+    public CurrencyReminderSettings CurrencyReminderSettings { get; set; } = new CurrencyReminderSettings();
     public BubbleSettings BubbleSettings { get; set; } = new BubbleSettings();
 
     public HintSettings HintSettings { get; set; } = new HintSettings();
@@ -99,6 +100,17 @@ public class DeepwaterEngagementSuiteSettings : ISettings
         IconPickerIndex.CurrencyTreasureChestOpulent => 2.0f,
         _ => 1f,
     };
+}
+
+[Submenu(CollapsedByDefault = true)]
+public class CurrencyReminderSettings
+{
+    public ToggleNode Enabled { get; set; } = new ToggleNode(true);
+    public RangeNode<int> RequiredExaltedOrbs { get; set; } = new RangeNode<int>(20, 0, 20);
+    public RangeNode<int> RequiredAlchemyOrbs { get; set; } = new RangeNode<int>(20, 0, 20);
+    public RangeNode<int> RequiredChaosOrbs { get; set; } = new RangeNode<int>(20, 0, 20);
+    public RangeNode<int> RequiredScouringOrbs { get; set; } = new RangeNode<int>(20, 0, 20);
+    public RangeNode<int> MaxInventoryItems { get; set; } = new RangeNode<int>(30, 0, 60);
 }
 
 [Submenu(CollapsedByDefault = true)]
@@ -317,6 +329,9 @@ public class VoyageSettings
 
     [Menu("Solver max charts", "Considera apenas os N melhores charts do estoque no solve (por peso). 0 = sem limite.")]
     public RangeNode<int> SolverMaxCharts { get; set; } = new RangeNode<int>(24, 0, 200);
+
+    [Menu("Use fast solver (exact)", "Solver exato por topologias+DP (port do upstream, validado no harness: 26/26 pools, nunca pior que o MRV — que foi subótimo em 17/26). Ignora o time limit; pode subir o max charts (0 = pool inteiro). Desligar volta ao MRV antigo.")]
+    public ToggleNode UseFastSolver { get; set; } = new ToggleNode(true);
     public RangeNode<float> BorderHighlightThreshold { get; set; } = new RangeNode<float>(1.01f, 0, 10);
     public RangeNode<float> ChartHighlightThreshold { get; set; } = new RangeNode<float>(1.0f, 0, 10);
 

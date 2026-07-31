@@ -658,10 +658,25 @@ public partial class DeepwaterEngagementSuite
 
                 var tileMultiplierArray = ComputeEffectiveMultipliers(tree, solveStrategy);
 
-                _voyagePlanner = new VoyagePlanner();
                 var timeLimitSetting = Settings.VoyageSettings.SolverTimeLimitSeconds.Value;
-                foreach (var r in _voyagePlanner.Solve(new VoyagePuzzle(pieces, tileMultiplierArray, []),
-                    new VoyagePlannerSettings(TimeLimitSeconds: timeLimitSetting)))
+                IEnumerable<VoyageSolutionResult> results;
+                if (Settings.VoyageSettings.UseFastSolver.Value)
+                {
+                    // Exato (topologias + DP), sem timeout. Respeita o pool já
+                    // filtrado (reserva) e o cap — otimalidade certificada dentro
+                    // do pool; com max charts = 0 cobre o estoque inteiro.
+                    _voyagePlanner = null;
+                    results = new VoyagePlannerFast().Solve(new VoyagePuzzle(pieces, tileMultiplierArray, []),
+                        new VoyagePlannerSettings(TimeLimitSeconds: timeLimitSetting));
+                }
+                else
+                {
+                    _voyagePlanner = new VoyagePlanner();
+                    results = _voyagePlanner.Solve(new VoyagePuzzle(pieces, tileMultiplierArray, []),
+                        new VoyagePlannerSettings(TimeLimitSeconds: timeLimitSetting));
+                }
+
+                foreach (var r in results)
                 {
                     _result = r;
                     _voyageNodesExplored = r.NodesExplored;
