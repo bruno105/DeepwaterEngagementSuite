@@ -348,7 +348,9 @@ public partial class DeepwaterEngagementSuite
 
     private void ZoneStatsScanGroundLoot()
     {
-        if ((DateTime.UtcNow - _statsDropScanAt).TotalMilliseconds < 1000)
+        // 300ms: com 1s, drops pegos na hora (Divine!) sumiam antes do scan ver o
+        // label — o dataset subcontava exatamente os itens mais valiosos.
+        if ((DateTime.UtcNow - _statsDropScanAt).TotalMilliseconds < 300)
         {
             return;
         }
@@ -400,7 +402,9 @@ public partial class DeepwaterEngagementSuite
     // depois do flush do registro da voyage — 3 voyages ficaram com rewards vazias).
     private void ZoneStatsScanRewards()
     {
-        if ((DateTime.UtcNow - _statsLastRewardScan).TotalMilliseconds < 500)
+        // 200ms: um "collect all" imediato esvaziava a janela antes do primeiro
+        // snapshot — o melhor snapshot precisa flagrar a janela ainda cheia.
+        if ((DateTime.UtcNow - _statsLastRewardScan).TotalMilliseconds < 200)
         {
             return;
         }
