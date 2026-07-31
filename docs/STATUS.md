@@ -18,6 +18,10 @@
 - Chart craft: cada explicit carrega um reward rider (values[0]) que cai em UMA
   recompensa (quant/rarity/gold/sulphur/pack); implícito real oculto até chartar
   na Valerie (semáforo do inventário recalibrado com 25 charts reais).
+  **VEREDITO do craft (31/07, teste etiquetado)**: riders NÃO aplicam em run SOLO
+  (86+ runs + 1 verde deliberado, instância sempre 20/20/20) — craft é economia
+  exclusiva de VOYAGE (registros de voyage mostram stats acima do baseline).
+  Chaos só em chart que vai pro board.
 - BiomeWeights medidos: CoralReef=CoralForest=13 (n~40; diferença era ruído),
   Sandy 6, ThermalVent 10 placeholder. Registro da voyage Speedrun de 31/07 de
   manhã PERDEU (HUD fechado sem flush) — flush periódico ainda pendente.

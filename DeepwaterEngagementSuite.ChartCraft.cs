@@ -14,7 +14,10 @@ namespace DeepwaterEngagementSuite;
 public partial class DeepwaterEngagementSuite
 {
     // Semáforo de craft nos charts do inventário (regras do Milky: "roll first,
-    // quantity scales strongboxes; charts can't be rolled after running"):
+    // quantity scales strongboxes; charts can't be rolled after running").
+    // VEREDITO (medido 31/07, teste etiquetado + 86 runs): os reward riders NÃO se
+    // aplicam a runs SOLO (instância sempre 20/20/20) — craft só paga no board de
+    // VOYAGE. Nunca gaste chaos em chart que vai rodar solo.
     //   VERDE   = pronto para rodar (keeper com quant/sulphur bons, ou sala especial rolada)
     //   AMARELO = vale re-craftar (keeper/sala especial com quant baixo -> "ROLL";
     //             não-keeper com quant 120%+ ainda serve de lateral no Speedrun -> "SIDE")
