@@ -93,7 +93,7 @@ public partial class DeepwaterEngagementSuite : BaseSettingsPlugin<DeepwaterEnga
             ApplyProfile(Settings.VoyageSettings.ProfileSelector.Value);
         }
         Settings.VoyageSettings.ProfileRenameNode.DrawDelegate = DrawProfileRenameNode;
-        Settings.ZoneAnalyticsNode.DrawDelegate = DrawZoneAnalyticsInline;
+        Settings.ZoneAnalytics.Node.DrawDelegate = DrawZoneAnalyticsInline;
         RegisterHotkey(Settings.PlannerSettings.StartSearchHotkey);
         RegisterHotkey(Settings.PlannerSettings.StopSearchHotkey);
         RegisterHotkey(Settings.PlannerSettings.ClearSearchHotkey);

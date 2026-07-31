@@ -50,7 +50,8 @@ public class DeepwaterEngagementSuiteSettings : ISettings
     public RangeNode<int> WorldIconSize { get; set; } = new RangeNode<int>(50, 25, 200);
     public RangeNode<int> MapIconSize { get; set; } = new RangeNode<int>(30, 15, 200);
 
-    [JsonIgnore] public CustomNode ZoneAnalyticsNode { get; set; } = new CustomNode();
+    [Menu("Zone analytics")]
+    public ZoneAnalyticsSettings ZoneAnalytics { get; set; } = new ZoneAnalyticsSettings();
 
     public CurrencyReminderSettings CurrencyReminderSettings { get; set; } = new CurrencyReminderSettings();
     public BubbleSettings BubbleSettings { get; set; } = new BubbleSettings();
@@ -102,6 +103,12 @@ public class DeepwaterEngagementSuiteSettings : ISettings
         IconPickerIndex.CurrencyTreasureChestOpulent => 2.0f,
         _ => 1f,
     };
+}
+
+[Submenu(CollapsedByDefault = true)]
+public class ZoneAnalyticsSettings
+{
+    [JsonIgnore] public CustomNode Node { get; set; } = new CustomNode();
 }
 
 [Submenu(CollapsedByDefault = true)]
