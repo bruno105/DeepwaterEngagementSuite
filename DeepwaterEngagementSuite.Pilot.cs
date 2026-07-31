@@ -113,6 +113,16 @@ public partial class DeepwaterEngagementSuite
     private Vector2? _pilotStickyPos;
     private const double PilotTargetSwitchMargin = 8;
 
+    // Histerese TEMPORAL (telemetria 31/07: 12 de 28 trocas com held=0s — alvo
+    // próximo aparece/some ao revelar chamas e a seta pingue-pongueia com o alvo
+    // distante). Roubo de seta só após o alvo atual segurar o mínimo; alvo que
+    // SOME entrega na hora. EXTRACT precisa do piso estável por 3s (gap de load
+    // de entidades disparava EXTRACT de 1 frame no meio da run).
+    private DateTime _pilotTargetSince = DateTime.MinValue;
+    private DateTime _pilotFloorSince = DateTime.MinValue;
+    private const double PilotMinHoldSeconds = 1.5;
+    private const double PilotExtractDebounceSeconds = 3.0;
+
     // Coleta com prio abaixo disso é lixo (gold 8-25, clam, unique-gear 30) e
     // não segura a expansão; acima (ducats 45+, spirits 50, chests 55+), vale
     // varrer antes de expandir.
@@ -544,8 +554,9 @@ public partial class DeepwaterEngagementSuite
             .Cast<(string Label, Vector2 Pos, int Prio)?>()
             .FirstOrDefault();
 
-        // Alvo atual só cede para um desafiante com folga de margem — ou quando
-        // some do pool (coletado/blacklist/célula visitada/troca de doutrina).
+        // Alvo atual só cede para um desafiante com folga de margem E depois de
+        // segurar o tempo mínimo — ou quando some do pool (coletado/blacklist/
+        // célula visitada/troca de doutrina), aí a entrega é imediata.
         if (next is { } cand && _pilotStickyPos is { } sticky &&
             Vector2.Distance(cand.Pos, sticky) >= 40)
         {
@@ -553,7 +564,9 @@ public partial class DeepwaterEngagementSuite
                 .Where(o => Vector2.Distance(o.Pos, sticky) < 40)
                 .Cast<(string Label, Vector2 Pos, int Prio)?>()
                 .FirstOrDefault();
-            if (current is { } cur && Score(cand) < Score(cur) + PilotTargetSwitchMargin)
+            if (current is { } cur &&
+                (Score(cand) < Score(cur) + PilotTargetSwitchMargin ||
+                 (DateTime.UtcNow - _pilotTargetSince).TotalSeconds < PilotMinHoldSeconds))
             {
                 next = cur;
             }
@@ -577,8 +590,15 @@ public partial class DeepwaterEngagementSuite
             if (bestExpansion != null)
             {
                 next = bestExpansion;
+                _pilotFloorSince = DateTime.MinValue;
             }
-            else
+            else if (_pilotFloorSince == DateTime.MinValue)
+            {
+                // Debounce: 1 frame de lista vazia (gap de load) não é fim de
+                // run — segura o melhor alvo atual até o piso ficar estável.
+                _pilotFloorSince = DateTime.UtcNow;
+            }
+            else if ((DateTime.UtcNow - _pilotFloorSince).TotalSeconds >= PilotExtractDebounceSeconds)
             {
                 nothingWorthTheWalk = true;
                 // Fim de run de verdade: em vez de seta apagada, apontar para a
@@ -588,6 +608,16 @@ public partial class DeepwaterEngagementSuite
                     ? ("EXTRACT", extraction, 200)
                     : null;
             }
+        }
+        else
+        {
+            _pilotFloorSince = DateTime.MinValue;
+        }
+
+        if (next is { } selected &&
+            (_pilotStickyPos is not { } prevSticky || Vector2.Distance(selected.Pos, prevSticky) >= 40))
+        {
+            _pilotTargetSince = DateTime.UtcNow; // identidade nova: reinicia o hold
         }
 
         _pilotStickyPos = next?.Pos;

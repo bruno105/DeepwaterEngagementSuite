@@ -333,6 +333,8 @@ public partial class DeepwaterEngagementSuite
         _pilotUnreachable.Clear();
         _pilotRouteFailCounts.Clear();
         _pilotStickyPos = null;
+        _pilotTargetSince = DateTime.MinValue;
+        _pilotFloorSince = DateTime.MinValue;
         _pathBreadcrumbs.Clear();
         Array.Clear(_cellSeconds);
         Array.Clear(_cellFirstOrder);
