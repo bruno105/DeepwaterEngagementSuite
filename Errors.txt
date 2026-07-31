@@ -1,2 +1,0 @@
-Build failed:
-[28/07/2026 19:09:36, C:\Users\bruno\Documents\Exile\PoEHelper\Plugins\Source\DeepwaterEngagementSuite\DeepwaterEngagementSuite.cs(96, 26)] CS0115: "DeepwaterEngagementSuite.OnSaveSettings()": não encontrado nenhum método adequado para substituição
