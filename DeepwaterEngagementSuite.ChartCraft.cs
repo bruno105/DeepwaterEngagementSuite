@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using ExileCore.PoEMemory.Components;
 using ExileCore.PoEMemory.Elements;
@@ -61,10 +62,24 @@ public partial class DeepwaterEngagementSuite
         }
     }
 
+    // Salas-peça das estratégias (visíveis ANTES de chartar): valem manter/rolar
+    // por si só. RoomBiomeOverride NÃO serve aqui — é tabela de bioma e inclui
+    // salas comuns (Eldritch Depths etc.) que não são peça de nada.
+    private static readonly HashSet<string> KeeperRooms = new(StringComparer.Ordinal)
+    {
+        "Sea Pillars",
+        "Pelagic Abyss",
+    };
+
     private (Color Color, string Tag) ClassifyChart(Entity entity, DeepwaterChart chart)
     {
         var mods = entity.GetComponent<Mods>();
 
+        // Mecânica (validada via bridge invcharts, 25 charts): cada explicit carrega
+        // um "reward rider" (values[0]) que cai em UMA das recompensas — quant,
+        // rarity, gold, sulphur ou pack. Rolar = redistribuir riders. No inventário
+        // o implícito real é OCULTO ("revealed once Charted" — todos genéricos,
+        // peso 10), então keeper-por-implícito só fira em chart já chartado.
         var keeperWeight = 0f;
         foreach (var im in mods?.ImplicitMods ?? [])
         {
@@ -73,31 +88,38 @@ public partial class DeepwaterEngagementSuite
             keeperWeight = Math.Max(keeperWeight, cfg?.Weight.Value ?? 0);
         }
 
-        var specialRoom = chart.Room?.Name is { } roomName && RoomBiomeOverride.ContainsKey(roomName);
-        var keeper = specialRoom || keeperWeight >= Settings.VoyageSettings.KeeperWeightThreshold.Value;
+        var keeper = (chart.Room?.Name is { } roomName && KeeperRooms.Contains(roomName)) ||
+                     keeperWeight >= Settings.VoyageSettings.KeeperWeightThreshold.Value;
 
-        // Quant/sulphur são propriedades COMPUTADAS (soma dos stats de todos os mods),
-        // não mods individuais — igual à linha "Item Quantity" do tooltip de maps.
         var quant = SumStatValues(mods, "quantity");
         var sulphur = SumStatValues(mods, "resource");
 
-        var greenQuant = Settings.VoyageSettings.GreenQuantThreshold.Value;
-        if (keeper && (quant >= greenQuant || sulphur >= 75))
+        // Distribuição real do pool: quant 0-120 (top ~20% ≥110 — a meta do Milky é
+        // alcançável), sulphur 0-120 (~20% ≥105). FILTH = candidato a pin no border
+        // do polvo (~4k sulphur); quant 110+ = pronto (maiores quants nas laterais).
+        if (sulphur >= 100)
+        {
+            return (Color.LightGreen, "FILTH");
+        }
+
+        if (quant >= Settings.VoyageSettings.GreenQuantThreshold.Value)
         {
             return (Color.LightGreen, null);
         }
 
         if (keeper)
         {
-            return (Color.Yellow, "ROLL");
+            return quant >= 80 || sulphur >= 75
+                ? (Color.LightGreen, null)
+                : (Color.Yellow, "ROLL");
         }
 
-        if (quant >= 120)
+        if (quant >= 80)
         {
-            return (Color.Yellow, "SIDE");
+            return (Color.Yellow, "ROLL"); // perto da meta: chaos até 110+
         }
 
-        return (Color.OrangeRed, null);
+        return (Color.OrangeRed, null); // Alc & Go / filler
     }
 
     /// <summary>Rect do tooltip do item em hover (vazio se nenhum) — para não desenhar por cima.</summary>
