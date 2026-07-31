@@ -488,6 +488,10 @@ public partial class DeepwaterEngagementSuite
             var route = _pilotRoute;
             var routeValid = settings.UseRadarRoute.Value && route is { Count: > 1 } &&
                              Vector2.Distance(_pilotRouteTarget, obj.Pos) < 40;
+            // Com o mapa grande aberto (overlay transparente em tela cheia), a linha
+            // do MAPA cruza a tela e parece uma reta no mundo — com este toggle, o
+            // desenho fica só no mapa enquanto ele estiver aberto.
+            var worldDrawing = !(settings.RouteOnlyOnLargeMap.Value && _largeMapOpen);
             if (routeValid)
             {
                 _pilotRouteFailCounts.Remove(QuantizeTarget(obj.Pos));
@@ -503,7 +507,8 @@ public partial class DeepwaterEngagementSuite
                     }
 
                     // No mundo, só o trecho próximo ao jogador (custo de terrain height).
-                    if (Vector2.Distance(_playerGridPos, a) <= 150 || Vector2.Distance(_playerGridPos, b) <= 150)
+                    if (worldDrawing &&
+                        (Vector2.Distance(_playerGridPos, a) <= 150 || Vector2.Distance(_playerGridPos, b) <= 150))
                     {
                         Graphics.DrawLine(GetWorldScreenPosition(a), GetWorldScreenPosition(b), 3, color);
                     }
@@ -514,14 +519,17 @@ public partial class DeepwaterEngagementSuite
                 // Sem rota (Radar calculando ou alvo sem caminho): toco curto de
                 // DIREÇÃO no mundo — a reta completa parecia um traçado válido
                 // atravessando terreno. A linha inteira fica só no mapa grande.
-                var playerScreen = GetWorldScreenPosition(_playerGridPos);
-                var toTarget = obj.Pos - _playerGridPos;
-                var dist = toTarget.Length();
-                var stubEnd = dist > 150f ? _playerGridPos + toTarget * (150f / dist) : obj.Pos;
-                var stubScreen = GetWorldScreenPosition(stubEnd);
-                if (IsRoughlyOnScreen(playerScreen) || IsRoughlyOnScreen(stubScreen))
+                if (worldDrawing)
                 {
-                    Graphics.DrawLine(playerScreen, stubScreen, 3, color);
+                    var playerScreen = GetWorldScreenPosition(_playerGridPos);
+                    var toTarget = obj.Pos - _playerGridPos;
+                    var dist = toTarget.Length();
+                    var stubEnd = dist > 150f ? _playerGridPos + toTarget * (150f / dist) : obj.Pos;
+                    var stubScreen = GetWorldScreenPosition(stubEnd);
+                    if (IsRoughlyOnScreen(playerScreen) || IsRoughlyOnScreen(stubScreen))
+                    {
+                        Graphics.DrawLine(playerScreen, stubScreen, 3, color);
+                    }
                 }
 
                 if (_largeMapOpen)

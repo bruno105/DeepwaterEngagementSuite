@@ -196,6 +196,9 @@ public class PilotSettings
     [Menu("Use Radar route", "Rota real por terreno andavel via Radar (PluginBridge); fallback em linha reta")]
     public ToggleNode UseRadarRoute { get; set; } = new ToggleNode(true);
 
+    [Menu("Route only on large map", "While the large map is open, the pilot route/line draws ONLY on the map (no world lines). Closing the map brings the world drawing back.")]
+    public ToggleNode RouteOnlyOnLargeMap { get; set; } = new ToggleNode(true);
+
     [Menu("Show 3x3 grid tracker", "Grid 3x3 da area + trilha do personagem no mapa aberto")]
     public ToggleNode ShowGridTracker { get; set; } = new ToggleNode(true);
 
