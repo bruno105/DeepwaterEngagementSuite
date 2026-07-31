@@ -186,6 +186,8 @@ public partial class DeepwaterEngagementSuite
     // objetivos sintéticos (ex.: tile do chart de GL puxa a rota CEDO, antes das
     // lanterns carregarem como entidades).
     private List<string>[,] _plannedPieceMods;
+    // Célula (0-8) cujo border tem o "+1 Divine por Rare" — rares LÁ pagam 1 div.
+    private int _plannedDivineCell = -1;
 
     private void ZoneStatsOnMonsterAdded(Entity entity)
     {

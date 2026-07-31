@@ -21,18 +21,64 @@ public partial class DeepwaterEngagementSuite
     // Objetivos que dão valor para o RESTO do run (buffs/recursos): a ordem importa —
     // pegá-los cedo multiplica tudo que vem depois, então a prioridade decai com o tempo.
     private static readonly HashSet<string> PilotBuffKinds =
-        ["GoldenLantern", "LanternReplenishEncounter", "AltarCrab", "AltarOctopus"];
+        ["GoldenLantern", "LanternReplenishEncounter", "AltarCrab", "AltarOctopus", "WispTile"];
 
     // Peças-chave do PLANO viram objetivos sintéticos no tile onde foram colocadas:
     // entidades distantes não carregam até chegarmos perto, então sem isso o Pilot
-    // só "descobre" o chart de GL no canto oposto quando já é tarde (decay). O kind
-    // reusa a tabela de prioridades (GL herda 110×decay no Meatfish).
-    private static readonly (string ModKey, string Kind)[] PlannedPieceObjectives =
-    [
-        ("AdjacentGoldenLanterns", "GoldenLantern"),
-        ("AdjacentStarfish", "StarfishTile"),
-        ("AdjacentPantheon", "PantheonTile"),
-    ];
+    // só "descobre" o chart de GL no canto oposto quando já é tarde (decay). Cada
+    // estratégia persegue as SUAS peças (doutrina do site/Milky); o kind reusa a
+    // tabela de prioridades.
+    private static readonly Dictionary<string, (string ModKey, string Kind)[]> StrategyPieceObjectives = new()
+    {
+        ["Meatfish"] =
+        [
+            ("AdjacentGoldenLanterns", "GoldenLantern"),
+            ("AdjacentStarfish", "StarfishTile"),
+            ("AdjacentPantheon", "PantheonTile"),
+            ("Room:Sea Pillars", "PillarTile"),
+        ],
+        ["Speedrun"] =
+        [
+            ("AdjacentOperativeBox", "BoxTile"),
+            ("AdjacentDivinerBox", "BoxTile"),
+            ("AdjacentLostMessage", "BoxTile"),
+            ("AdjacentArcanistBox", "BoxTile"),
+            ("AdjacentStrongboxes", "BoxTile"),
+        ],
+        ["DivineBorder"] =
+        [
+            ("Room:Sea Pillars", "DivinePieceTile"),
+            ("AdjacentStrongboxes", "FeederTile"),
+            ("AdjacentStarfish", "FeederTile"),
+        ],
+        ["DivineBoxes"] =
+        [
+            ("Room:Pelagic Abyss", "DivinePieceTile"),
+            ("AdjacentStrongboxes", "FeederTile"),
+            ("AdjacentOperativeBox", "FeederTile"),
+            ("AdjacentDivinerBox", "FeederTile"),
+            ("AdjacentArcanistBox", "FeederTile"),
+        ],
+        ["Ethereal"] =
+        [
+            ("AdjacentWisps", "WispTile"),
+            ("AdjacentGoldenLanterns", "GoldenLantern"),
+        ],
+    };
+
+    // Sem estratégia (Base/AlcGo): só GL vale travessia — o resto é queima local.
+    private static readonly (string ModKey, string Kind)[] DefaultPieceObjectives =
+        [("AdjacentGoldenLanterns", "GoldenLantern")];
+
+    // Pedágio de distância por estratégia (prio por unidade): queima = local e
+    // rápido; Divine = o tile certo vale a caminhada.
+    private static readonly Dictionary<string, double> StrategyDistancePenalty = new()
+    {
+        ["AlcGo"] = 0.06,
+        ["Speedrun"] = 0.045,
+        ["DivineBorder"] = 0.02,
+        ["DivineBoxes"] = 0.02,
+    };
 
     private List<Vector2i> _pilotRoute;
     private Vector2 _pilotRouteTarget;
@@ -66,9 +112,14 @@ public partial class DeepwaterEngagementSuite
         ["ClamTreasureChest"] = 30,
         ["UniqueWeaponChest"] = 30,
         ["UniqueArmourChest"] = 30,
-        // Tiles de peças do plano (objetivos sintéticos) — fora do Meatfish valem pouco.
+        // Tiles de peças do plano (objetivos sintéticos) — fora da estratégia dona valem pouco.
         ["StarfishTile"] = 40,
         ["PantheonTile"] = 40,
+        ["PillarTile"] = 40,
+        ["BoxTile"] = 45,
+        ["FeederTile"] = 40,
+        ["DivinePieceTile"] = 40,
+        ["WispTile"] = 40,
     };
 
     private static readonly Dictionary<string, Dictionary<string, int>> PilotStrategyOverrides = new()
@@ -77,6 +128,7 @@ public partial class DeepwaterEngagementSuite
         {
             ["CurrencyTreasureChestOpulent"] = 105,
             ["CurrencyTreasureChest"] = 100,
+            ["BoxTile"] = 95, // tiles dos charts de box: é lá que as boxes spawnam
             ["BottledItemChest"] = 95,
             ["ScarabChest"] = 90,
             ["StackedDecksChest"] = 90,
@@ -89,16 +141,32 @@ public partial class DeepwaterEngagementSuite
         {
             ["GoldenLantern"] = 110,
             ["LanternReplenishEncounter"] = 100,
-            // Starfish/Pantheon SEM decay: matar os giga-rares depois dos stacks é
-            // até melhor (rarity aplica no kill) — só as lanterns têm pressa.
+            // Starfish/Pantheon/Pillar SEM decay: matar os giga-rares depois dos
+            // stacks é até melhor (rarity aplica no kill) — só as lanterns têm pressa.
             ["StarfishTile"] = 80,
             ["PantheonTile"] = 75,
             ["AllflameEmbersChest"] = 70,
+            ["PillarTile"] = 60,
         },
         ["DivineBorder"] = new Dictionary<string, int>
         {
+            ["DivinePieceTile"] = 105, // o tile do Divine É o farm inteiro
+            ["FeederTile"] = 85,
             ["GoldenLantern"] = 70,
             ["Unrevealed"] = 50,
+        },
+        ["DivineBoxes"] = new Dictionary<string, int>
+        {
+            ["DivinePieceTile"] = 105,
+            ["FeederTile"] = 90,
+            ["GoldenLantern"] = 70,
+            ["Unrevealed"] = 50,
+        },
+        ["Ethereal"] = new Dictionary<string, int>
+        {
+            ["GoldenLantern"] = 100,
+            ["LanternReplenishEncounter"] = 90,
+            ["WispTile"] = 90,
         },
     };
 
@@ -235,14 +303,16 @@ public partial class DeepwaterEngagementSuite
 
                     // Peça-chave do plano nesta célula: objetivo sintético com a
                     // prioridade do kind (GL puxa CEDO, com decay; some quando a
-                    // célula é visitada — aí as entidades reais assumem).
+                    // célula é visitada — aí as entidades reais assumem). Cada
+                    // estratégia persegue as suas peças.
                     if (_plannedPieceMods?[r, c] is { } placedMods)
                     {
-                        foreach (var (modKey, kind) in PlannedPieceObjectives)
+                        var pieceTable = StrategyPieceObjectives.GetValueOrDefault(strategyName, DefaultPieceObjectives);
+                        foreach (var (modKey, kind) in pieceTable)
                         {
                             if (placedMods.Any(m => m.Contains(modKey, StringComparison.OrdinalIgnoreCase)))
                             {
-                                objectives.Add(($"{kind} tile ({r},{c})", target, EffectivePriority(kind)));
+                                objectives.Add(($"{kind} ({r},{c})", target, EffectivePriority(kind)));
                                 kindCounts[kind] = kindCounts.GetValueOrDefault(kind) + 1;
                             }
                         }
@@ -253,18 +323,29 @@ public partial class DeepwaterEngagementSuite
 
         var lanternsLeft = kindCounts.GetValueOrDefault("LanternReplenishEncounter");
         var meatfishKillPhase = strategyName == "Meatfish" && lanternsLeft == 0;
-        if (strategyName == "DivineBorder" || meatfishKillPhase)
+        var divineStrategy = strategyName is "DivineBorder" or "DivineBoxes";
+        if (divineStrategy || meatfishKillPhase)
         {
             try
             {
                 foreach (var monster in Handler?.Monsters ?? [])
                 {
-                    if (monster is { IsValid: true, IsAlive: true } &&
-                        monster.Rarity is MonsterRarity.Rare or MonsterRarity.Unique)
+                    if (monster is not { IsValid: true, IsAlive: true } ||
+                        monster.Rarity is not (MonsterRarity.Rare or MonsterRarity.Unique))
                     {
-                        objectives.Add(($"{monster.Rarity}", monster.GridPosNum,
-                            strategyName == "DivineBorder" ? 95 : 75));
+                        continue;
                     }
+
+                    // Divine: SÓ os rares dentro da célula do border Divine pagam
+                    // (1 div cada) — rare do outro lado do mapa é rare comum.
+                    var prio = 75;
+                    if (divineStrategy)
+                    {
+                        prio = _plannedDivineCell < 0 ? 95
+                            : GridCellIndex(monster.GridPosNum) == _plannedDivineCell ? 115 : 60;
+                    }
+
+                    objectives.Add(($"{monster.Rarity}", monster.GridPosNum, prio));
                 }
             }
             catch
@@ -290,8 +371,9 @@ public partial class DeepwaterEngagementSuite
             reachable = objectives; // tudo em blacklist: melhor apontar algo que nada
         }
 
+        var distPenalty = StrategyDistancePenalty.GetValueOrDefault(strategyName, 0.03);
         var next = reachable
-            .OrderByDescending(o => o.Prio - Vector2.Distance(_playerGridPos, o.Pos) * 0.03)
+            .OrderByDescending(o => o.Prio - Vector2.Distance(_playerGridPos, o.Pos) * distPenalty)
             .Cast<(string Label, Vector2 Pos, int Prio)?>()
             .FirstOrDefault();
 
@@ -415,10 +497,14 @@ public partial class DeepwaterEngagementSuite
 
         var behavior = strategyName switch
         {
-            "Speedrun" => "Abra boxes/eventos, ignore trash. Extraia no limite.",
+            "Speedrun" => "Tiles de BOX primeiro, juice com Alch/Scour/Ex, abra tudo. Extraia no limite.",
             "Meatfish" when !meatfishKillPhase => $"FASE 1: colete os lanterns ({lanternsLeft} restantes)",
-            "Meatfish" => "FASE 2: full clear de rares/uniques. Extraia por ultimo.",
-            "DivineBorder" => "Full-clear de rares na regiao do border Divine.",
+            "Meatfish" => "FASE 2: full clear de rares/uniques (Starfish/Pantheon). Extraia por ultimo.",
+            "DivineBorder" or "DivineBoxes" when _plannedDivineCell >= 0 =>
+                $"Tile do Divine = ({_plannedDivineCell / 3},{_plannedDivineCell % 3}): rares LA valem 1 div cada. Feeders adjacentes.",
+            "DivineBorder" or "DivineBoxes" => "Full-clear de rares na regiao do border Divine.",
+            "Ethereal" => "Wisps nas laterais cedo, lanterns nos cantos, mate os packs magicos.",
+            "AlcGo" => "Queima local: lanterns, clique tudo por perto, sem desvios. Saia rapido.",
             _ => "Siga os marcadores; abra o que tiver valor.",
         };
         ImGui.TextUnformatted(behavior);

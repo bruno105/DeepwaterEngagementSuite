@@ -779,6 +779,16 @@ public partial class DeepwaterEngagementSuite
                             sol.Grid[pr, pc]?.Piece?.Modifiers.Select(m => m.Name).ToList() ?? [];
                     }
                 }
+
+                _plannedDivineCell = -1;
+                foreach (var (tileIndex, tileMods) in GetTileMods(tree))
+                {
+                    if (tileMods.Any(m => m.RawName.Contains("RareMonsterDivine", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        _plannedDivineCell = tileIndex;
+                        break;
+                    }
+                }
             }
         }
 
