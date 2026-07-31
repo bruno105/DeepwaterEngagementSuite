@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Windows.Forms;
+using ExileCore;
 using ExileCore.Shared.Helpers;
 using ImGuiNET;
 using Newtonsoft.Json.Linq;
@@ -120,19 +122,9 @@ public partial class DeepwaterEngagementSuite
         }
     }
 
-    private void DrawZoneAnalytics()
+    // Desenhado DENTRO do settings do plugin (CustomNode) — não é janela própria.
+    private void DrawZoneAnalyticsInline()
     {
-        if (!Settings.ShowZoneAnalytics.Value)
-        {
-            return;
-        }
-
-        if (!ImGui.Begin("Zone Analytics"))
-        {
-            ImGui.End();
-            return;
-        }
-
         if (_analyticsVoyages == null)
         {
             LoadZoneAnalytics();
@@ -141,14 +133,6 @@ public partial class DeepwaterEngagementSuite
         if (ImGui.Button("Refresh"))
         {
             LoadZoneAnalytics();
-        }
-
-        ImGui.SameLine();
-        if (ImGui.Button("Finalize zone record now"))
-        {
-            FinalizeZoneStats();
-            LoadZoneAnalytics();
-            _analyticsStatus = "record finalized + reloaded";
         }
 
         if (_analyticsStatus != null)
@@ -204,6 +188,24 @@ public partial class DeepwaterEngagementSuite
             ImGui.EndTable();
         }
 
-        ImGui.End();
+        // ÚLTIMO RECURSO: força o flush do registro em andamento (instância/cache
+        // preso). Uso normal continua sendo o flush automático na troca de área —
+        // por isso a trava de Shift, no padrão do delete de profile.
+        ImGui.Spacing();
+        ImGui.TextColored(Color.Gray.ToImguiVec4(), "Last resort (stuck record/cache):");
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Finalize zone record now (hold Shift)"))
+        {
+            if (!Input.IsKeyDown(Keys.ShiftKey))
+            {
+                _analyticsStatus = "hold Shift to confirm";
+            }
+            else
+            {
+                FinalizeZoneStats();
+                LoadZoneAnalytics();
+                _analyticsStatus = "record finalized + reloaded";
+            }
+        }
     }
 }

@@ -93,6 +93,7 @@ public partial class DeepwaterEngagementSuite : BaseSettingsPlugin<DeepwaterEnga
             ApplyProfile(Settings.VoyageSettings.ProfileSelector.Value);
         }
         Settings.VoyageSettings.ProfileRenameNode.DrawDelegate = DrawProfileRenameNode;
+        Settings.ZoneAnalyticsNode.DrawDelegate = DrawZoneAnalyticsInline;
         RegisterHotkey(Settings.PlannerSettings.StartSearchHotkey);
         RegisterHotkey(Settings.PlannerSettings.StopSearchHotkey);
         RegisterHotkey(Settings.PlannerSettings.ClearSearchHotkey);
@@ -437,7 +438,6 @@ public partial class DeepwaterEngagementSuite : BaseSettingsPlugin<DeepwaterEnga
         {
             DrawGridTracker();
             DrawCurrencyReminder();
-            DrawZoneAnalytics(); // antes do gate de Handler: útil no hideout também
         }
 
         if (Handler == null)
