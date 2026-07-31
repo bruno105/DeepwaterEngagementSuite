@@ -5,8 +5,8 @@
     [1.15, 1.08, 1.00]
   ],
   "BiomeWeights": [
-    {"Id": "CoralReef", "Weight": 15.0},
-    {"Id": "CoralForest", "Weight": 12.0},
+    {"Id": "CoralReef", "Weight": 13.0},
+    {"Id": "CoralForest", "Weight": 13.0},
     {"Id": "Sandy", "Weight": 6.0},
     {"Id": "ThermalVent", "Weight": 10.0}
   ],
