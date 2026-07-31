@@ -11,6 +11,10 @@ public enum IconPickerIndex
     GoldTreasureChest,
     ClamTreasureChest,
     CurrencyTreasureChest,
+    /// <summary>Baú opulento de currency (annul/divine) — estrela grande no mapa.</summary>
+    CurrencyTreasureChestOpulent,
+    /// <summary>Baú de Gemcutter's Prisms — Metadata/.../CurrencyGemcuttersChest1.</summary>
+    CurrencyGemcuttersChest,
     UniqueWeaponChest,
     UniqueArmourChest,
     ScarabChest,

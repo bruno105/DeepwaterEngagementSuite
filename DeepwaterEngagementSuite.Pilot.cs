@@ -31,8 +31,10 @@ public partial class DeepwaterEngagementSuite
     private static readonly Dictionary<string, int> PilotBasePriority = new()
     {
         ["GoldenLantern"] = 96,
+        ["CurrencyTreasureChestOpulent"] = 90, // annul/divine — sempre prioridade alta
         ["Unrevealed"] = 80,
         ["CurrencyTreasureChest"] = 70,
+        ["CurrencyGemcuttersChest"] = 60,
         ["BottledItemChest"] = 70,
         ["ScarabChest"] = 65,
         ["StackedDecksChest"] = 65,
@@ -53,6 +55,7 @@ public partial class DeepwaterEngagementSuite
     {
         ["Speedrun"] = new Dictionary<string, int>
         {
+            ["CurrencyTreasureChestOpulent"] = 105,
             ["CurrencyTreasureChest"] = 100,
             ["BottledItemChest"] = 95,
             ["ScarabChest"] = 90,

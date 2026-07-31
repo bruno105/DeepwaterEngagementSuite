@@ -69,6 +69,8 @@ public partial class DeepwaterEngagementSuite : BaseSettingsPlugin<DeepwaterEnga
     public override bool Initialise()
     {
         InitOnce();
+        // Upstream PR#9: renderizar ACIMA do Minimap Icons (ordem de plugin).
+        Order = 10_000;
         _profilesDirectory = Path.Combine(ConfigDirectory, "profiles");
         Directory.CreateDirectory(_profilesDirectory);
         EnsureDefaultProfile();
@@ -184,7 +186,10 @@ public partial class DeepwaterEngagementSuite : BaseSettingsPlugin<DeepwaterEnga
     {
         var p when p.Contains("BottledItemChest", StringComparison.Ordinal) => IconPickerIndex.BottledItemChest,
         var p when p.Contains("ClamTreasureChest", StringComparison.Ordinal) => IconPickerIndex.ClamTreasureChest,
+        // Opulent ANTES do genérico: o path contém "CurrencyTreasureChest" como substring.
+        var p when p.Contains("CurrencyTreasureChestOpulent", StringComparison.Ordinal) => IconPickerIndex.CurrencyTreasureChestOpulent,
         var p when p.Contains("CurrencyTreasureChest", StringComparison.Ordinal) => IconPickerIndex.CurrencyTreasureChest,
+        var p when p.Contains("CurrencyGemcuttersChest", StringComparison.Ordinal) => IconPickerIndex.CurrencyGemcuttersChest,
         var p when p.Contains("DeepwaterAnchorUniqueWeapon", StringComparison.Ordinal) => IconPickerIndex.UniqueWeaponChest,
         var p when p.Contains("DeepwaterAnchorUniqueArmour", StringComparison.Ordinal) => IconPickerIndex.UniqueArmourChest,
         var p when p.Contains("DeepwaterChestScarabs", StringComparison.Ordinal) => IconPickerIndex.ScarabChest,
@@ -445,14 +450,15 @@ public partial class DeepwaterEngagementSuite : BaseSettingsPlugin<DeepwaterEnga
                         var mapSettings = Settings.IconMapping.GetValueOrDefault(chestType, new IconDisplaySettings());
                         var icon = mapSettings.Icon ?? DeepwaterEngagementSuiteSettings.GetDefaultIcon(chestType);
                         var tint = mapSettings.Tint ?? DeepwaterEngagementSuiteSettings.GetDefaultTint(chestType);
+                        var sizeScale = mapSettings.SizeScale ?? DeepwaterEngagementSuiteSettings.GetDefaultIconSizeScale(chestType);
                         if (mapSettings.ShowOnMap)
                         {
-                            DrawIconOnMap(e, icon, tint, Vector2.Zero);
+                            DrawIconOnMap(e, icon, tint, Vector2.Zero, sizeScale);
                         }
 
                         if (mapSettings.ShowInWorld)
                         {
-                            DrawIconInWorld(e, icon, tint, Vector2.Zero);
+                            DrawIconInWorld(e, icon, tint, Vector2.Zero, sizeScale);
                         }
 
                         continue;
@@ -749,11 +755,12 @@ public partial class DeepwaterEngagementSuite : BaseSettingsPlugin<DeepwaterEnga
         };
     }
 
-    private void DrawIconOnMap(EntityCacheItem entity, MapIconsIndex icon, Color? color, Vector2 offset)
+    private void DrawIconOnMap(EntityCacheItem entity, MapIconsIndex icon, Color? color, Vector2 offset, float sizeScale = 1f)
     {
         if (_largeMapOpen)
         {
-            var halfsize = Settings.MapIconSize / 2.0f;
+            var iconSize = Settings.MapIconSize.Value * sizeScale;
+            var halfsize = iconSize / 2.0f;
             var point = GetEntityPosOnMapScreen(entity) + offset * halfsize * 2;
             var entityPos = entity.Pos;
             var entityPos2 = new Vector2(entityPos.X, entityPos.Y);
@@ -762,13 +769,14 @@ public partial class DeepwaterEngagementSuite : BaseSettingsPlugin<DeepwaterEnga
                 Settings.BubbleSettings.HideCapturedEntitiesOnMap,
                 Settings.PlannerSettings.CapturedEntityMapFrameColor,
                 Settings.BubbleSettings.CapturedEntityMapFrameThickness,
-                Settings.MapIconSize);
+                iconSize);
         }
     }
 
-    private void DrawIconInWorld(EntityCacheItem entity, MapIconsIndex icon, Color? color, Vector2 offset)
+    private void DrawIconInWorld(EntityCacheItem entity, MapIconsIndex icon, Color? color, Vector2 offset, float sizeScale = 1f)
     {
-        var halfsize = Settings.WorldIconSize / 2.0f;
+        var iconSize = Settings.WorldIconSize.Value * sizeScale;
+        var halfsize = iconSize / 2.0f;
         var entityPos = entity.Pos;
         var entityPos2 = new Vector2(entityPos.X, entityPos.Y);
         var point = Camera.WorldToScreen(entityPos) + offset * halfsize * 2;
@@ -776,7 +784,7 @@ public partial class DeepwaterEngagementSuite : BaseSettingsPlugin<DeepwaterEnga
             Settings.BubbleSettings.HideCapturedEntitiesInWorld,
             Settings.PlannerSettings.CapturedEntityWorldFrameColor,
             Settings.BubbleSettings.CapturedEntityWorldFrameThickness,
-            Settings.WorldIconSize);
+            iconSize);
     }
 
     private void DrawIcon(

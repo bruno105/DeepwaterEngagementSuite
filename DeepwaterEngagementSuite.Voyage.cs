@@ -87,55 +87,131 @@ public partial class DeepwaterEngagementSuite
         return [];
     }
 
+    private static bool TileHasChart(VoyageTileElement tile) =>
+        tile?.ItemContainer?.Entity?.GetComponent<DeepwaterChart>() != null;
+
+    private static bool BoardIsClear(VoyageWindow tree) =>
+        tree.Tiles.All(t => !TileHasChart(t));
+
+    // Upstream PR#9: o jogo às vezes não registra hover no primeiro SetCursorPos
+    // depois de interagir com ImGui — um wiggle devolve o foco de hover ao jogo.
+    private static async SyncTask<bool> WiggleCursorToFocus(Vector2 screenPos)
+    {
+        const float delta = 4f;
+        Input.SetCursorPos(screenPos + new Vector2(delta, 0));
+        await TaskUtils.NextFrame();
+        Input.SetCursorPos(screenPos + new Vector2(-delta, 0));
+        await TaskUtils.NextFrame();
+        Input.SetCursorPos(screenPos + new Vector2(0, delta));
+        await TaskUtils.NextFrame();
+        Input.SetCursorPos(screenPos);
+        await TaskUtils.NextFrame();
+        return true;
+    }
+
     private async SyncTask<bool> PlacePieces(VoyageSolution solution)
     {
-        var tree = GameController.IngameState.IngameUi.VoyageWindow;
-        var clearPos = tree.ClearButton.GetClientRectCache.Center.ToVector2Num();
-        Input.SetCursorPos(GameController.Window.GetWindowRectangleTimeCache.TopLeft.ToVector2Num() + clearPos);
-        await TaskUtils.CheckEveryFrameWithThrow(() => tree.ClearButton.HasShinyHighlight, TimeSpan.FromSeconds(1));
-        Input.LeftDown();
-        await TaskUtils.NextFrame();
-        Input.LeftUp();
-        await TaskUtils.CheckEveryFrameWithThrow(() => tree.Tiles.All(x => x.ItemContainer == null), TimeSpan.FromSeconds(1));
-        var availableCharts = GetAvailableCharts();
-        for (int i = 0; i < 9; i++)
+        try
         {
-            var tile = tree.Tiles[i];
-            var p = solution.Grid[i / 3, i % 3];
-            var pieceElem = availableCharts[p.Piece.Id];
-            var click1Pos = pieceElem.GetClientRectCache.Center.ToVector2Num();
-            var click2Pos = tile.GetClientRectCache.Center.ToVector2Num();
-            Input.SetCursorPos(GameController.Window.GetWindowRectangleTimeCache.TopLeft.ToVector2Num() + click1Pos);
-            await TaskUtils.CheckEveryFrameWithThrow(() => GameController.IngameState.UIHover?.Address.Equals(pieceElem.Address) ?? false,
-                () => $"Hover address was {GameController.IngameState.UIHover?.Address:X} not {pieceElem.Address:X}",
-                TimeSpan.FromSeconds(1));
-            Input.LeftDown();
-            await TaskUtils.NextFrame();
-            Input.LeftUp();
-            await TaskUtils.CheckEveryFrameWithThrow(() => GameController.IngameState.IngameUi.Cursor.Action == MouseActionType.HoldItemForSell, TimeSpan.FromSeconds(1));
-            Input.SetCursorPos(GameController.Window.GetWindowRectangleTimeCache.TopLeft.ToVector2Num() + click2Pos);
-            await TaskUtils.CheckEveryFrameWithThrow(() => GameController.IngameState.UIHoverElement?.Address.Equals(tile.Address) ?? false,
-                () => $"Hover address was {GameController.IngameState.UIHoverElement?.Address:X} not {tile.Address:X}",
-                TimeSpan.FromSeconds(1));
-            Input.LeftDown();
-            await TaskUtils.NextFrame();
-            Input.LeftUp();
-            await TaskUtils.CheckEveryFrameWithThrow(() => GameController.IngameState.IngameUi.Cursor.Action == MouseActionType.Free, TimeSpan.FromSeconds(1));
+            var tree = GameController.IngameState.IngameUi.VoyageWindow;
+            var winOrigin = GameController.Window.GetWindowRectangleTimeCache.TopLeft.ToVector2Num();
+            var needsFocusWiggle = true;
 
-            while (tile.ItemContainer?.Entity.GetComponent<DeepwaterChart>().Rotation is {} rot && rot != p.Rotation)
+            if (!BoardIsClear(tree))
             {
-                DebugWindow.LogMsg($"{rot}, {p.Rotation}");
-                var click3Pos = tile.GetClientRectCache.Center.ToVector2Num();
-                Input.SetCursorPos(GameController.Window.GetWindowRectangleTimeCache.TopLeft.ToVector2Num() + click3Pos);
-                await TaskUtils.CheckEveryFrameWithThrow(() => GameController.IngameState.UIHover?.Address.Equals(tile.ItemContainer.Address) ?? false, TimeSpan.FromSeconds(1));
-                Input.RightDown();
-                await TaskUtils.NextFrame();
-                Input.RightUp();
-                await TaskUtils.CheckEveryFrameWithThrow(() => tile.ItemContainer?.Entity?.GetComponent<DeepwaterChart>()?.Rotation is {} rot2 && rot2 != rot, TimeSpan.FromSeconds(1));
-            }
-        }
+                var clearPos = winOrigin + tree.ClearButton.GetClientRectCache.Center.ToVector2Num();
+                Input.SetCursorPos(clearPos);
+                if (needsFocusWiggle)
+                {
+                    await WiggleCursorToFocus(clearPos);
+                    needsFocusWiggle = false;
+                }
 
-        return true;
+                await TaskUtils.CheckEveryFrameWithThrow(
+                    () => tree.ClearButton.HasShinyHighlight,
+                    () => "Clear button never highlighted (board may already be empty?)",
+                    TimeSpan.FromSeconds(2));
+                Input.LeftDown();
+                await TaskUtils.NextFrame();
+                Input.LeftUp();
+                await TaskUtils.CheckEveryFrameWithThrow(
+                    () => BoardIsClear(tree),
+                    () => "Board still has charts after Clear",
+                    TimeSpan.FromSeconds(3));
+            }
+
+            var availableCharts = GetAvailableCharts();
+            for (var i = 0; i < 9; i++)
+            {
+                var tile = tree.Tiles[i];
+                var p = solution.Grid[i / 3, i % 3];
+                if (p?.Piece == null)
+                    continue;
+                if (p.Piece.Id < 0 || p.Piece.Id >= availableCharts.Count)
+                {
+                    DebugWindow.LogError($"Voyage Place: piece id {p.Piece.Id} out of range ({availableCharts.Count} charts)");
+                    continue;
+                }
+
+                var pieceElem = availableCharts[p.Piece.Id];
+                var click1Pos = winOrigin + pieceElem.GetClientRectCache.Center.ToVector2Num();
+                var click2Pos = winOrigin + tile.GetClientRectCache.Center.ToVector2Num();
+                Input.SetCursorPos(click1Pos);
+                if (needsFocusWiggle)
+                {
+                    await WiggleCursorToFocus(click1Pos);
+                    needsFocusWiggle = false;
+                }
+
+                await TaskUtils.CheckEveryFrameWithThrow(
+                    () => GameController.IngameState.UIHover?.Address.Equals(pieceElem.Address) ?? false,
+                    () => $"Hover address was {GameController.IngameState.UIHover?.Address:X} not {pieceElem.Address:X}",
+                    TimeSpan.FromSeconds(1));
+                Input.LeftDown();
+                await TaskUtils.NextFrame();
+                Input.LeftUp();
+                await TaskUtils.CheckEveryFrameWithThrow(
+                    () => GameController.IngameState.IngameUi.Cursor.Action == MouseActionType.HoldItemForSell,
+                    TimeSpan.FromSeconds(1));
+                Input.SetCursorPos(click2Pos);
+                await TaskUtils.CheckEveryFrameWithThrow(
+                    () => GameController.IngameState.UIHoverElement?.Address.Equals(tile.Address) ?? false,
+                    () => $"Hover address was {GameController.IngameState.UIHoverElement?.Address:X} not {tile.Address:X}",
+                    TimeSpan.FromSeconds(1));
+                Input.LeftDown();
+                await TaskUtils.NextFrame();
+                Input.LeftUp();
+                await TaskUtils.CheckEveryFrameWithThrow(
+                    () => GameController.IngameState.IngameUi.Cursor.Action == MouseActionType.Free &&
+                          TileHasChart(tile),
+                    TimeSpan.FromSeconds(1));
+
+                while (tile.ItemContainer?.Entity.GetComponent<DeepwaterChart>()?.Rotation is { } rot &&
+                       rot != p.Rotation)
+                {
+                    DebugWindow.LogMsg($"{rot}, {p.Rotation}");
+                    var click3Pos = winOrigin + tile.GetClientRectCache.Center.ToVector2Num();
+                    Input.SetCursorPos(click3Pos);
+                    await TaskUtils.CheckEveryFrameWithThrow(
+                        () => GameController.IngameState.UIHover?.Address.Equals(tile.ItemContainer.Address) ?? false,
+                        TimeSpan.FromSeconds(1));
+                    Input.RightDown();
+                    await TaskUtils.NextFrame();
+                    Input.RightUp();
+                    await TaskUtils.CheckEveryFrameWithThrow(
+                        () => tile.ItemContainer?.Entity?.GetComponent<DeepwaterChart>()?.Rotation is { } rot2 &&
+                              rot2 != rot,
+                        TimeSpan.FromSeconds(1));
+                }
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            DebugWindow.LogError($"Voyage Place failed: {ex.Message}");
+            return false;
+        }
     }
 
     private void DrawVoyageHighlights()
