@@ -14,7 +14,9 @@
   relaxação de atribuição admissíveis e strong branching; _bestScore inicia em -inf
   (scores negativos valem). Empata com o Fast em 480 pools aleatórios do harness
   (subótimo/sem-solução do relatório original era timeout por bound frouxo, não
-  inadmissibilidade — o bound antigo era admissível, só inútil).
+  inadmissibilidade — o bound antigo era admissível, só inútil). Harness de regressão
+  MRV×Fast (fora do repo, HUD não compila): `PoEHelper\tools\VoyageHarness`
+  (`VoyageHarness.exe <pools> <baseSeed> [--limit=s] [--bound-only]`).
 - **Estratégias** (VoyageStrategy.DocStrategies): as 6 do site one-more-map, pesos
   verificados contra o bundle 2026-07-30 — Speedrun/Meatfish/DivineBorder/DivineBoxes
   (cutedog)/Ethereal (⚠ deprecado)/AlcGo (refugo, sem requisitos) — boosts por
