@@ -107,6 +107,12 @@ public partial class DeepwaterEngagementSuite
 
     private static (int X, int Y) QuantizeTarget(Vector2 pos) => ((int)(pos.X / 20), (int)(pos.Y / 20));
 
+    // Histerese de alvo: os pedágios mudam continuamente conforme o jogador anda
+    // e a rede de bolhas cresce — sem margem, dois alvos com scores parecidos
+    // trocam de posto por frame e a rota/EXIT pulam de destino (relato 31/07).
+    private Vector2? _pilotStickyPos;
+    private const double PilotTargetSwitchMargin = 8;
+
     private static readonly Dictionary<string, int> PilotBasePriority = new()
     {
         ["GoldenLantern"] = 96,
@@ -460,12 +466,42 @@ public partial class DeepwaterEngagementSuite
 
         var distPenalty = StrategyDistancePenalty.GetValueOrDefault(strategyName, 0.03);
         var darkToll = StrategyDarkWaterToll.GetValueOrDefault(strategyName, 0.08);
+
+        double Score((string Label, Vector2 Pos, int Prio) o) =>
+            o.Prio - Vector2.Distance(_playerGridPos, o.Pos) * distPenalty - NetworkDist(o.Pos) * darkToll;
+
         var next = reachable
-            .OrderByDescending(o => o.Prio
-                                    - Vector2.Distance(_playerGridPos, o.Pos) * distPenalty
-                                    - NetworkDist(o.Pos) * darkToll)
+            .OrderByDescending(Score)
             .Cast<(string Label, Vector2 Pos, int Prio)?>()
             .FirstOrDefault();
+
+        // Alvo atual só cede para um desafiante com folga de margem — ou quando
+        // some da lista (coletado/blacklist/célula visitada).
+        if (next is { } cand && _pilotStickyPos is { } sticky &&
+            Vector2.Distance(cand.Pos, sticky) >= 40)
+        {
+            var current = reachable
+                .Where(o => Vector2.Distance(o.Pos, sticky) < 40)
+                .Cast<(string Label, Vector2 Pos, int Prio)?>()
+                .FirstOrDefault();
+            if (current is { } cur && Score(cand) < Score(cur) + PilotTargetSwitchMargin)
+            {
+                next = cur;
+            }
+        }
+
+        // Piso de valor: se nem o MELHOR alvo sobrevive aos pedágios (score <= 0),
+        // andar custa mais que o prêmio — ex.: gold chest prio 8 a 1.237un
+        // (score -48) puxando reta pelo mapa inteiro por ser o último objetivo
+        // vivo (31/07). Sem seta nesse caso; o painel manda extrair.
+        var nothingWorthTheWalk = false;
+        if (next is { } best && Score(best) <= 0)
+        {
+            next = null;
+            nothingWorthTheWalk = true;
+        }
+
+        _pilotStickyPos = next?.Pos;
 
         // Seta/rota para o próximo objetivo (mundo + mapa). Com o Radar instalado, a
         // rota segue o terreno andável (Radar.LookForRoute via PluginBridge).
@@ -575,25 +611,59 @@ public partial class DeepwaterEngagementSuite
                 }
             }
 
-            // Alvo FORA da rede: marca o ponto de SAÍDA — a borda da bolha mais
-            // próxima do alvo, onde o dark water começa e a próxima lantern deve
-            // ser plantada ("próximo ponto de reach" da expansão por fronteira).
+            // Alvo FORA da rede: marca o ponto de SAÍDA da rede. Com rota válida,
+            // o EXIT é onde a ROTA cruza a fronteira das bolhas — andável e no
+            // caminho por construção, e avança suave conforme a rede cresce. A
+            // borda geométrica (fallback sem rota) caía em terreno intransponível
+            // quando a bolha vazava pela borda do mapa, e flapava entre bolhas
+            // quase equidistantes (relatos 31/07) — agora com snap para andável.
             if (netBubbles.Count > 0 && NetworkDist(obj.Pos) > 0)
             {
-                var nearest = netBubbles.MinBy(b => Vector2.Distance(obj.Pos, b.Center) - b.Radius);
-                var dir = obj.Pos - nearest.Center;
-                if (dir.LengthSquared() > 1)
+                Vector2? exitPos = null;
+                if (routeValid)
                 {
-                    var exitPos = nearest.Center + dir * (nearest.Radius / dir.Length());
+                    var startIsPlayer =
+                        Vector2.Distance(new Vector2(route[0].X, route[0].Y), _playerGridPos) <=
+                        Vector2.Distance(new Vector2(route[^1].X, route[^1].Y), _playerGridPos);
+                    Vector2? lastInside = null;
+                    for (var i = 0; i < route.Count; i++)
+                    {
+                        var idx = startIsPlayer ? i : route.Count - 1 - i;
+                        var p = new Vector2(route[idx].X, route[idx].Y);
+                        if (NetworkDist(p) <= 0)
+                        {
+                            lastInside = p;
+                        }
+                        else if (lastInside != null)
+                        {
+                            exitPos = lastInside; // primeira travessia luz -> escuro
+                            break;
+                        }
+                    }
+                }
+
+                if (exitPos == null)
+                {
+                    var nearest = netBubbles.MinBy(b => Vector2.Distance(obj.Pos, b.Center) - b.Radius);
+                    var dir = obj.Pos - nearest.Center;
+                    if (dir.LengthSquared() > 1)
+                    {
+                        var edge = nearest.Center + dir * (nearest.Radius / dir.Length());
+                        exitPos = SnapToWalkable(edge) ?? edge;
+                    }
+                }
+
+                if (exitPos is { } exit)
+                {
                     if (_largeMapOpen)
                     {
                         Graphics.DrawTextWithBackground("EXIT",
-                            Graphics.GridToMap(exitPos, _playerGridPos), color, Color.Black);
+                            Graphics.GridToMap(exit, _playerGridPos), color, Color.Black);
                     }
 
                     if (worldDrawing)
                     {
-                        var exitScreen = GetWorldScreenPosition(exitPos);
+                        var exitScreen = GetWorldScreenPosition(exit);
                         if (IsRoughlyOnScreen(exitScreen))
                         {
                             Graphics.DrawTextWithBackground("EXIT",
@@ -717,6 +787,11 @@ public partial class DeepwaterEngagementSuite
             }
 
             ImGui.TextColored(settings.ObjectiveColor.Value.ToImguiVec4(), nextLine);
+        }
+        else if (nothingWorthTheWalk)
+        {
+            ImGui.TextColored(Color.OrangeRed.ToImguiVec4(),
+                "Next: nothing worth the walk left - EXTRACT!");
         }
 
         ImGui.End();

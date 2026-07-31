@@ -332,6 +332,7 @@ public partial class DeepwaterEngagementSuite
         _terrainComponents = null;
         _pilotUnreachable.Clear();
         _pilotRouteFailCounts.Clear();
+        _pilotStickyPos = null;
         _pathBreadcrumbs.Clear();
         Array.Clear(_cellSeconds);
         Array.Clear(_cellFirstOrder);
