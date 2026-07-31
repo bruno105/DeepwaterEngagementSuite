@@ -20,7 +20,8 @@ public partial class DeepwaterEngagementSuite
     // presa — o flush normal só acontece na troca de instância).
     private sealed record ZoneAnalyticsRow(
         DateTime Time, string Strategy, double Minutes, int SulGain, double SulPerMin,
-        int Cells, int Chests, int Bottles, int Rares, int Uniques, int Div, int Ex, int Chaos, int Scarabs, int Decks);
+        int Cells, int Chests, int Bottles, int Rares, int Uniques, int Div, int Ex, int Chaos, int Scarabs, int Decks,
+        int LanternsPlaced, int LanternsMax);
 
     private sealed record ChartAnalyticsRow(
         DateTime Time, string Biome, string Room, int DurSec, int SulGain,
@@ -218,7 +219,8 @@ public partial class DeepwaterEngagementSuite
                     minutes, gain, minutes > 0.1 ? gain / minutes : 0,
                     cells, chests, bottles,
                     (int?)record["monsters"]?["Rare"] ?? 0, (int?)record["monsters"]?["Unique"] ?? 0,
-                    div, ex, chaos, scarabs, decks));
+                    div, ex, chaos, scarabs, decks,
+                    (int?)record["placedLanterns"] ?? 0, (int?)record["maxLanterns"] ?? 0));
             }
 
             voyages.Reverse();
@@ -261,7 +263,7 @@ public partial class DeepwaterEngagementSuite
         ImGui.TextUnformatted(_analyticsChartsSummary ?? "");
 
         if (_analyticsVoyages is { Count: > 0 } &&
-            ImGui.BeginTable("zoneAnalytics", 15,
+            ImGui.BeginTable("zoneAnalytics", 16,
                 ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Sortable |
                 ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingFixedFit))
         {
@@ -269,6 +271,7 @@ public partial class DeepwaterEngagementSuite
                      {
                          "time", "strategy", "dur (min)", "sulphur", "sulphur/min", "cells",
                          "chests", "bottles", "rare", "unique", "divine", "exalted", "chaos", "scarabs", "decks",
+                         "lanterns",
                      })
             {
                 ImGui.TableSetupColumn(header);
@@ -292,6 +295,7 @@ public partial class DeepwaterEngagementSuite
                 12 => (a, b) => a.Chaos.CompareTo(b.Chaos),
                 13 => (a, b) => a.Scarabs.CompareTo(b.Scarabs),
                 14 => (a, b) => a.Decks.CompareTo(b.Decks),
+                15 => (a, b) => a.LanternsPlaced.CompareTo(b.LanternsPlaced),
                 _ => null,
             });
             foreach (var r in _analyticsVoyages)
@@ -327,6 +331,8 @@ public partial class DeepwaterEngagementSuite
                 ImGui.TextUnformatted($"{r.Scarabs}");
                 ImGui.TableNextColumn();
                 ImGui.TextUnformatted($"{r.Decks}");
+                ImGui.TableNextColumn();
+                ImGui.TextUnformatted(r.LanternsMax > 0 ? $"{r.LanternsPlaced}/{r.LanternsMax}" : "-");
             }
 
             ImGui.EndTable();

@@ -127,6 +127,10 @@ public partial class DeepwaterEngagementSuite
         ["LanternReplenishEncounter"] = 55,
         ["CursedDucatDrop"] = 45,
         ["IzaroObject"] = 40,
+        // 9 abertos numa AlcGo de 31/07 só por acaso de caminho (prio default 10
+        // = invisível): espíritos possuem rares -> mais loot. Prio modesta para
+        // entrar na rota quando perto; medir o retorno nas próximas runs.
+        ["TormentedSpiritEncounter"] = 50,
         // Gold pile e Maps chest: praticamente sem lucro (feedback do Bruno 31/07) —
         // só valem quando estão no caminho, nunca como desvio.
         ["MapsChest"] = 20,
@@ -744,10 +748,39 @@ public partial class DeepwaterEngagementSuite
             var cellText = $"Cell: ({currentCell / 3},{currentCell % 3})";
             if (_plannedMults != null)
             {
-                cellText += $"  mult x{_plannedMults[currentCell / 3, currentCell % 3]:F2}";
-            }
+                var cellMult = _plannedMults[currentCell / 3, currentCell % 3];
+                ImGui.TextUnformatted(cellText + $"  mult x{cellMult:F2}");
 
-            ImGui.TextUnformatted(cellText);
+                // Dica de permanência: o mult roteia ATÉ o tile, mas nada dizia
+                // "fique" — na AlcGo de 31/07 a célula x8.75 (2º melhor tile)
+                // recebeu os menores 18s da run, dinheiro deixado na mesa.
+                var better = 0;
+                for (var r = 0; r < 3; r++)
+                {
+                    for (var c = 0; c < 3; c++)
+                    {
+                        if (_plannedMults[r, c] > cellMult)
+                        {
+                            better++;
+                        }
+                    }
+                }
+
+                if (better <= 1 && cellMult >= 1.5)
+                {
+                    ImGui.SameLine();
+                    ImGui.TextColored(Color.LightGreen.ToImguiVec4(), "TOP CELL - farm it dry");
+                }
+                else if (cellMult <= 1.2)
+                {
+                    ImGui.SameLine();
+                    ImGui.TextColored(Color.Gray.ToImguiVec4(), "low mult - grab & go");
+                }
+            }
+            else
+            {
+                ImGui.TextUnformatted(cellText);
+            }
         }
 
         var maxLanterns = Handler?.MaxLanternCount ?? 0;
