@@ -1,5 +1,35 @@
 # DeepwaterEngagementSuite — estado do projeto (sessões 29–31/07/2026)
 
+## Modelo de borders v2 + regras posicionais (31/07, fim do dia)
+
+Portado do código aberto do site one-more-map (github.com/one-more-map/
+one-more-map.github.io — scoring.ts/solver.ts/strategies.ts/mods.ts):
+
+- **ChartEffect (magnitude)** NÃO multiplica o tile: amplifica os mods da PEÇA
+  ocupante (40/60/80% por tier). No solver Fast: fator `CellMagnitude` sobre a
+  contribuição inteira da peça; no painel/advisor: aproximado como 1.4-1.8×.
+- **QuantityPerConnection** = base 120/180% de quant MENOS 50% por conexão
+  CASADA da peça no tile (3-4 conexões = border NEGATIVO, piso 0.2);
+  **RareMonstersPerConnection** = +50/75% POR conexão (0 conexões = nada,
+  âncora do cfg em 2). No Fast é exato por topologia (`CellMultByConn[cell][conn]`,
+  popcount dos braços casados); display ancorado em 2 conexões.
+- **PositionRules** por estratégia (bônus suaves por peça×célula, escala do
+  nosso score): Speedrun quant nas 4 laterais (contínuo) + sulphur no tile do
+  Filthscrabble; Meatfish = board do Milky (Starfish ±400 topo/fundo-meio,
+  Pantheon SÓ meio-direita, GL centro, Pillars cantos); Divine* = peça-âncora
+  no tile do border Divine rolado + feeders adjacentes. Resolução NearBorderKey
+  usa o border ROLADO (GetTileMods).
+- **Enforcement Speedrun**: UMA peça de box (Operative > Diviner > Bottle)
+  TRAVADA no centro via LockedPlacements (Fast honra travas posicionais,
+  rotação livre por topologia).
+- **Fallback MRV segue no modelo legado** (flat) — documentado no call site;
+  harness MRV×Fast continua válido só para puzzles legados.
+- Números dos bônus/âncoras são chutes calibráveis — validar com runs reais.
+- NÃO portado (decisão): layouts de conectores por estratégia (highway AlcGo),
+  modo filler (pior board), mods de chart com scaling por conexão (sem textos
+  reais conhecidos), relaxamento de conectividade (site diz que o jogo NÃO
+  exige tudo-conectado — nossas topologias exigem; TESTAR in-game antes).
+
 ## Validações fechadas em 31/07
 
 - **Pipeline de estratégias AUDITADO dígito a dígito**: harness (scratchpad

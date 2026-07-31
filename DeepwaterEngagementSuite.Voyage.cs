@@ -625,23 +625,124 @@ public partial class DeepwaterEngagementSuite
     }
 
     /// <summary>Multiplicadores efetivos por célula: P[r,c] × produto dos border mods do tile (boostados pela estratégia, se houver).</summary>
+    // ── Modelo de borders v2 (semânticas do código aberto do site, 31/07) ──
+    // ChartEffect NÃO multiplica o tile: amplifica os mods da PEÇA ocupante
+    // (40/60/80% por tier). QuantityPerConnection = base 120/180% de quant
+    // MENOS 50% por conexão da peça; RareMonstersPerConnection = MAIS 50/75%
+    // POR conexão. Painel/advisor/scoreboard usam aproximações (mag como
+    // 1.4-1.8×; ±/conn ancorado em 2 conexões típicas); o solver Fast recebe o
+    // modelo exato via ComputeSolverBorderModel.
+
+    private static int ChartEffectTier(string id) =>
+        id.EndsWith("3", StringComparison.Ordinal) ? 80 :
+        id.EndsWith("2", StringComparison.Ordinal) ? 60 : 40;
+
+    private static bool IsMagnitudeBorder(string id) =>
+        id.Contains("ChartEffect", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsPerConnBorder(string id) =>
+        id.Contains("PerConnection", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Multiplicador ±/conexão: o excesso CONFIGURADO é a âncora.
+    /// QPC: fração (base − 50×conn)/base com base 120/180 (âncora = 0 conexões,
+    /// piso 0.2 — em 3-4 conexões o border REDUZ quant). Rares: conn/2 (âncora
+    /// = 2 conexões; 0 conexões = sem efeito).</summary>
+    private static double ConnShapedMultiplier(string id, double cfg, int conn)
+    {
+        if (id.Contains("QuantityPerConnection", StringComparison.OrdinalIgnoreCase))
+        {
+            double baseline = id.EndsWith("2", StringComparison.Ordinal) ? 180 : 120;
+            return Math.Max(0.2, 1 + (cfg - 1) * (baseline - 50 * conn) / baseline);
+        }
+
+        return Math.Max(0.2, 1 + (cfg - 1) * conn / 2.0);
+    }
+
+    private double ConfiguredBorderMultiplier(string id) =>
+        Settings.VoyageSettings.BorderModifiers.Content
+            .FirstOrDefault(c => c.Id.Value == id)?.ValueMultiplier.Value ?? 1;
+
+    /// <summary>Multiplicador de EXIBIÇÃO (painel/advisor/scoreboard): magnitude
+    /// como 1+mag/100, ±/conn em 2 conexões, resto = configurado; boost por cima.</summary>
+    private double DisplayBorderMultiplier(string id, VoyageStrategy strategy)
+    {
+        double mult;
+        if (IsMagnitudeBorder(id))
+        {
+            mult = 1 + ChartEffectTier(id) / 100.0;
+        }
+        else if (IsPerConnBorder(id))
+        {
+            mult = ConnShapedMultiplier(id, ConfiguredBorderMultiplier(id), 2);
+        }
+        else
+        {
+            mult = ConfiguredBorderMultiplier(id);
+        }
+
+        return strategy?.BoostBorderMultiplier(id, mult) ?? mult;
+    }
+
     private double[,] ComputeEffectiveMultipliers(VoyageWindow tree, VoyageStrategy strategy = null)
     {
         var result = PositionWeightMap.ScreenToGrid(Settings.VoyageSettings.PositionWeights);
         foreach (var (tileIndex, mods) in GetTileMods(tree))
         {
             var mult = mods
-                .Select(m =>
-                {
-                    var baseMult = (double)(Settings.VoyageSettings.BorderModifiers.Content
-                        .FirstOrDefault(c => c.Id.Value == m.RawName)?.ValueMultiplier.Value ?? 1);
-                    return strategy?.BoostBorderMultiplier(m.RawName, baseMult) ?? baseMult;
-                })
+                .Select(m => DisplayBorderMultiplier(m.RawName, strategy))
                 .Aggregate(1.0, (a, b) => a * b);
             result[tileIndex / 3, tileIndex % 3] *= mult;
         }
 
         return result;
+    }
+
+    /// <summary>Modelo EXATO para o solver Fast: por célula, o fator de magnitude
+    /// (amplifica a peça ocupante) e o multiplicador em função das conexões da
+    /// topologia (0..4). ChartEffect fica FORA do produto — senão contaria dobrado.</summary>
+    private (double[] Magnitude, double[][] MultByConn) ComputeSolverBorderModel(VoyageWindow tree, VoyageStrategy strategy)
+    {
+        var p = PositionWeightMap.ScreenToGrid(Settings.VoyageSettings.PositionWeights);
+        var magnitude = Enumerable.Repeat(1.0, 9).ToArray();
+        var multByConn = new double[9][];
+        var tileMods = GetTileMods(tree);
+        for (var cell = 0; cell < 9; cell++)
+        {
+            multByConn[cell] = new double[5];
+            var flat = p[cell / 3, cell % 3];
+            var perConn = new List<string>();
+            foreach (var m in tileMods.GetValueOrDefault(cell) ?? [])
+            {
+                if (IsMagnitudeBorder(m.RawName))
+                {
+                    magnitude[cell] += ChartEffectTier(m.RawName) / 100.0;
+                }
+                else if (IsPerConnBorder(m.RawName))
+                {
+                    perConn.Add(m.RawName);
+                }
+                else
+                {
+                    var cfg = ConfiguredBorderMultiplier(m.RawName);
+                    flat *= strategy?.BoostBorderMultiplier(m.RawName, cfg) ?? cfg;
+                }
+            }
+
+            for (var conn = 0; conn <= 4; conn++)
+            {
+                var v = flat;
+                foreach (var id in perConn)
+                {
+                    var shaped = ConnShapedMultiplier(id, ConfiguredBorderMultiplier(id), conn);
+                    var boosted = strategy?.BoostBorderMultiplier(id, shaped) ?? shaped;
+                    v *= Math.Max(0.1, boosted);
+                }
+
+                multByConn[cell][conn] = v;
+            }
+        }
+
+        return (magnitude, multByConn);
     }
 
     /// <summary>Peças do pool completo (cache por address; Id pode divergir do índice atual — não usar para cliques).</summary>
@@ -865,6 +966,84 @@ public partial class DeepwaterEngagementSuite
                     ? [new LockedPlacement(1, 1, centrePiece.Id, 0)]
                     : [];
 
+                // Bônus posicionais da estratégia (PositionRules do site): matriz
+                // peça × célula somada ao peso no Fast. Regras NearBorderKey
+                // resolvem as células pelo border ROLADO neste board.
+                double[][] pieceCellBonus = null;
+                if (solveStrategy?.PositionRules is { Length: > 0 } posRules)
+                {
+                    var tileModNames = GetTileMods(tree)
+                        .ToDictionary(kv => kv.Key, kv => kv.Value.Select(m => m.RawName).ToList());
+
+                    int[] ResolveCells(PositionRule rule)
+                    {
+                        if (rule.Cells != null)
+                        {
+                            return rule.Cells;
+                        }
+
+                        if (rule.NearBorderKey == null)
+                        {
+                            return [];
+                        }
+
+                        var touched = tileModNames
+                            .Where(kv => kv.Value.Any(nm => nm.Contains(rule.NearBorderKey, StringComparison.OrdinalIgnoreCase)))
+                            .Select(kv => kv.Key)
+                            .Distinct()
+                            .ToList();
+                        if (!rule.AdjacentToBorder)
+                        {
+                            return touched.ToArray();
+                        }
+
+                        var neighbours = new HashSet<int>();
+                        foreach (var t in touched)
+                        {
+                            if (t / 3 > 0) neighbours.Add(t - 3);
+                            if (t / 3 < 2) neighbours.Add(t + 3);
+                            if (t % 3 > 0) neighbours.Add(t - 1);
+                            if (t % 3 < 2) neighbours.Add(t + 1);
+                        }
+
+                        return neighbours.ToArray();
+                    }
+
+                    pieceCellBonus = new double[pieces.Count][];
+                    for (var pi = 0; pi < pieces.Count; pi++)
+                    {
+                        pieceCellBonus[pi] = new double[9];
+                    }
+
+                    foreach (var rule in posRules)
+                    {
+                        var cells = ResolveCells(rule);
+                        if (cells.Length == 0)
+                        {
+                            continue;
+                        }
+
+                        for (var pi = 0; pi < pieces.Count; pi++)
+                        {
+                            var matched = pieces[pi].Modifiers
+                                .Where(md => rule.Keys.Any(k => md.Name.Contains(k, StringComparison.OrdinalIgnoreCase)))
+                                .ToList();
+                            if (matched.Count == 0)
+                            {
+                                continue;
+                            }
+
+                            var add = rule.Bonus + matched.Sum(md => md.Weight) * rule.PerWeight;
+                            foreach (var cell in cells)
+                            {
+                                pieceCellBonus[pi][cell] += add;
+                            }
+                        }
+                    }
+                }
+
+                var (cellMagnitude, cellMultByConn) = ComputeSolverBorderModel(tree, solveStrategy);
+
                 var timeLimitSetting = Settings.VoyageSettings.SolverTimeLimitSeconds.Value;
                 IEnumerable<VoyageSolutionResult> results;
                 if (Settings.VoyageSettings.UseFastSolver.Value)
@@ -872,12 +1051,18 @@ public partial class DeepwaterEngagementSuite
                     // Exato (topologias + DP), sem timeout. Respeita o pool já
                     // filtrado (reserva) e o cap — otimalidade certificada dentro
                     // do pool; com max charts = 0 cobre o estoque inteiro.
+                    // Recebe o modelo v2: magnitude por célula, mult por conexões
+                    // e bônus posicionais.
                     _voyagePlanner = null;
-                    results = new VoyagePlannerFast().Solve(new VoyagePuzzle(pieces, tileMultiplierArray, locks),
+                    results = new VoyagePlannerFast().Solve(
+                        new VoyagePuzzle(pieces, tileMultiplierArray, locks,
+                            cellMagnitude, cellMultByConn, pieceCellBonus),
                         new VoyagePlannerSettings(TimeLimitSeconds: timeLimitSetting));
                 }
                 else
                 {
+                    // Fallback MRV: segue no modelo LEGADO (multiplicadores flat de
+                    // ComputeEffectiveMultipliers) — sem magnitude/±conn/posicionais.
                     _voyagePlanner = new VoyagePlanner();
                     results = _voyagePlanner.Solve(new VoyagePuzzle(pieces, tileMultiplierArray, locks),
                         new VoyagePlannerSettings(TimeLimitSeconds: timeLimitSetting));
@@ -1045,8 +1230,7 @@ public partial class DeepwaterEngagementSuite
         {
             var effective = ComputeEffectiveMultipliers(tree, _activeStrategy);
             var avg = Settings.VoyageSettings.BorderModifiers.Content
-                .Select(b => _activeStrategy?.BoostBorderMultiplier(b.Id.Value, b.ValueMultiplier.Value)
-                             ?? (double)b.ValueMultiplier.Value)
+                .Select(b => DisplayBorderMultiplier(b.Id.Value, _activeStrategy))
                 .DefaultIfEmpty(1)
                 .Average();
             var positionWeights = PositionWeightMap.ScreenToGrid(Settings.VoyageSettings.PositionWeights);

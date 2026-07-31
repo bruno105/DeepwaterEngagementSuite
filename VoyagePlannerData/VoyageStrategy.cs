@@ -15,6 +15,23 @@ public record PieceRequirement(string Label, int Count, string[] Keys);
 /// uma estratégia considera o POOL COMPLETO de charts (média dos top-9 valores
 /// boostados) × soma dos multiplicadores efetivos das bordas boostadas.
 /// </summary>
+/// <summary>
+/// Regra posicional de estratégia (port do site one-more-map): bônus SUAVE no
+/// peso da peça em células específicas — estáticas (Cells, coords de solver:
+/// row 0 = baixo, centro = 4) ou resolvidas pelo border rolado (NearBorderKey;
+/// AdjacentToBorder = vizinhos do tile do border). Keys casam por substring nos
+/// nomes dos mods da peça; Bonus é flat, PerWeight soma os pesos dos mods
+/// casados × fator (contínuo: quanto maior o stat, mais o tile puxa). Escala do
+/// Bonus = pontos do NOSSO score (células valem centenas) — números ajustáveis.
+/// </summary>
+public record PositionRule(
+    string[] Keys,
+    int[] Cells = null,
+    string NearBorderKey = null,
+    bool AdjacentToBorder = false,
+    double Bonus = 0,
+    double PerWeight = 0);
+
 public record VoyageStrategy(
     string Name,
     StrategyBoost[] ChartBoosts,
@@ -26,7 +43,8 @@ public record VoyageStrategy(
     // Regra de layout do site: tiers ordenados de preferência para a ÚNICA peça
     // travada no centro (ex.: Operative > Diviner > Bottle no Speedrun). Peças
     // que batem em qualquer tier são da mesma família — só a escolhida entra.
-    string[][] CentrePieceKeys = null)
+    string[][] CentrePieceKeys = null,
+    PositionRule[] PositionRules = null)
 {
     public const double MissingRequirementPenalty = 0.2;
 
@@ -73,6 +91,13 @@ public record VoyageStrategy(
                 ["OperativeBox"],
                 ["DivinerBox"],
                 ["LostMessage"],
+            ],
+            PositionRules:
+            [
+                // "highest quants on the 4 sides": gradiente contínuo (site: per 6)
+                new PositionRule(["Stat:Quantity"], Cells: [1, 3, 5, 7], PerWeight: 1.0),
+                // Filthscrabble (~4k sulphur octopus): chart de MAIS sulphur NO tile
+                new PositionRule(["Stat:Resource"], NearBorderKey: "GiantOctopus", PerWeight: 2.0),
             ]),
         // milky-meatfish. Regex: "cannot|poss|lantern|pantheon". Site: star/pantheon/
         // lantern/possess 10; fracture 8, voyage:rare 8, adjacent:rare 6; border:rare 9;
@@ -98,7 +123,19 @@ public record VoyageStrategy(
                 new PieceRequirement("1x Possessed", 1, ["MonstersPossessed"]),
                 new PieceRequirement("1x No-Equipment/Fracture", 1, ["NoEquipmentDrops", "RareFracture"]),
             ],
-            "Milky layout: Starfish ONLY top/bottom-middle | Pantheon ONLY right-middle | GL centre | Pillars corners | collect ALL lanterns (~280% quant, 840 rarity)"),
+            "Milky layout: Starfish ONLY top/bottom-middle | Pantheon ONLY right-middle | GL centre | Pillars corners | collect ALL lanterns (~280% quant, 840 rarity)",
+            PositionRules:
+            [
+                // Board do Milky (site ±80/±40, na nossa escala): Starfish topo/
+                // fundo-meio, Pantheon SÓ meio-direita, GL centro, Pillars cantos.
+                new PositionRule(["AdjacentStarfish"], Cells: [7, 1], Bonus: 400),
+                new PositionRule(["AdjacentStarfish"], Cells: [0, 2, 3, 4, 5, 6, 8], Bonus: -400),
+                new PositionRule(["AdjacentPantheon"], Cells: [5], Bonus: 400),
+                new PositionRule(["AdjacentPantheon"], Cells: [0, 1, 2, 3, 4, 6, 7, 8], Bonus: -400),
+                new PositionRule(["AdjacentGoldenLanterns"], Cells: [4], Bonus: 250),
+                new PositionRule(["Room:Sea Pillars"], Cells: [0, 2, 6, 8], Bonus: 250),
+                new PositionRule(["Room:Sea Pillars"], Cells: [1, 3, 4, 5, 7], Bonus: -250),
+            ]),
         // divine-border-rares (Milky). Regex: "rare monsters in all voy|strongbox".
         // Site: rare 10 (adj+voy+border), star 8, box 8 (genérico — specialty boxes são
         // do cutedog), possess/fracture 6, border:divine 10. Pillar PINADO no tile do
@@ -119,7 +156,15 @@ public record VoyageStrategy(
                 new PieceRequirement("3x Starfish/Strongbox", 3, ["Starfish", "Strongboxes"]),
                 new PieceRequirement("5x Increased Rares", 5, ["IncreasedRareMonsters"]),
             ],
-            "Milky: Pillar ON the Divine tile | '+5 Strongboxes' feeders adjacent (roll boxes for Stream of Monsters +4 / of Rarity +3 = 7 div/box; one +5 chart ~ 35 div) | Starfish = backup feeder"),
+            "Milky: Pillar ON the Divine tile | '+5 Strongboxes' feeders adjacent (roll boxes for Stream of Monsters +4 / of Rarity +3 = 7 div/box; one +5 chart ~ 35 div) | Starfish = backup feeder",
+            PositionRules:
+            [
+                // Pillar NO tile do border Divine (site +100); feeders ADJACENTES
+                // ao tile: strongboxes (site +35) > starfish (site +15).
+                new PositionRule(["Room:Sea Pillars"], NearBorderKey: "RareMonsterDivine", Bonus: 600),
+                new PositionRule(["AdjacentStrongboxes"], NearBorderKey: "RareMonsterDivine", AdjacentToBorder: true, Bonus: 300),
+                new PositionRule(["AdjacentStarfish"], NearBorderKey: "RareMonsterDivine", AdjacentToBorder: true, Bonus: 200),
+            ]),
         // cutedog-divine-boxes. Regex de compra: 120%+ quant. Site: voyage:rare 10,
         // adjacent:rare 8, border:rare/divine 10, box 9, specialty boxes 8, self:pack 6.
         // Pelagic Abyss pack-size alto no tile do Divine (+80, packsize per 8);
@@ -140,7 +185,16 @@ public record VoyageStrategy(
                 new PieceRequirement("3x Strongbox (any type)", 3, ["Strongboxes", "DivinerBox", "ArcanistBox", "OperativeBox"]),
                 new PieceRequirement("5x Increased Rares (voyage)", 5, ["VoyageIncreasedRareMonsters"]),
             ],
-            "cutedog: HIGH pack-size Pelagic on the Divine tile | 3x boxes (any type) adjacent | roll boxes: '3 additional Rares'=3 div + 'Stream of Monsters'=4 (both=7) | buy 120%+ quant charts on trade"),
+            "cutedog: HIGH pack-size Pelagic on the Divine tile | 3x boxes (any type) adjacent | roll boxes: '3 additional Rares'=3 div + 'Stream of Monsters'=4 (both=7) | buy 120%+ quant charts on trade",
+            PositionRules:
+            [
+                // Pelagic (pack-size alto) NO tile do Divine (site +80, pack per 8);
+                // QUALQUER strongbox adjacente serve de feeder (site +25).
+                new PositionRule(["Room:Pelagic Abyss"], NearBorderKey: "RareMonsterDivine", Bonus: 600),
+                new PositionRule(["Stat:PackSize"], NearBorderKey: "RareMonsterDivine", PerWeight: 2.0),
+                new PositionRule(["AdjacentStrongboxes", "AdjacentDivinerBox", "AdjacentArcanistBox", "AdjacentOperativeBox"],
+                    NearBorderKey: "RareMonsterDivine", AdjacentToBorder: true, Bonus: 300),
+            ]),
         // milky-ethereal — DEPRECADO pelo próprio Milky (Palsteron: ~5 div). Mantido
         // como referência, igual ao site. Site: wisps 10, minmagic 10, magic 9,
         // lantern 8, border:minmagic 8; NoEquip pesa MAIS que no Meatfish.

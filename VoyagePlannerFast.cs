@@ -14,7 +14,11 @@ namespace DeepwaterEngagementSuite;
 /// constantes por célula. Sem cap de pool e sem timeout: ótimo certificado sobre
 /// TODOS os charts. Suporta LockedPlacements POSICIONAIS: a célula travada só
 /// aceita a peça dona (e ela não vai a outra célula); a rotação da trava é
-/// ignorada — o DP escolhe a melhor por topologia.
+/// ignorada — o DP escolhe a melhor por topologia. Modelo de borders v2 (quando
+/// o puzzle o traz): magnitude amplifica a peça ocupante, borders ±/conexão são
+/// avaliados no nº de braços casados da topologia, e PositionRules entram como
+/// bônus por (peça, célula) — o peso vira função da topologia, reconstruído por
+/// candidata (continua exato: tudo separável por peça×célula dentro de cada uma).
 /// </summary>
 public class VoyagePlannerFast
 {
@@ -132,30 +136,22 @@ public class VoyagePlannerFast
             }
         }
 
-        // Multiplicadores por célula do NOSSO modelo (borders × P, já boostados).
+        // Multiplicadores por célula do modelo LEGADO (borders × P, já boostados)
+        // — fallback quando o puzzle não traz o modelo v2.
         var m = new double[Cells];
         for (var cell = 0; cell < Cells; cell++)
         {
             m[cell] = puzzle.LocationModifiers[cell / GridSize, cell % GridSize];
         }
 
-        var mTotal = m.Sum();
-        var mNeighbours = new double[Cells];
-        for (var cell = 0; cell < Cells; cell++)
-        {
-            var r = cell / GridSize;
-            var c = cell % GridSize;
-            foreach (var (_, dr, dc) in Dirs)
-            {
-                var nr = r + dr;
-                var nc = c + dc;
-                if (nr < 0 || nr >= GridSize || nc < 0 || nc >= GridSize) continue;
-                mNeighbours[cell] += m[nr * GridSize + nc];
-            }
-        }
+        // Modelo v2 (opcional): magnitude por célula (amplifica a peça ocupante),
+        // M dependente das conexões CASADAS da topologia (±/conn) e bônus
+        // posicionais por (peça, célula). Com ele o peso vira função da topologia
+        // — reconstruído por candidata (barato: 9×5 + n×9 flops).
+        var magF = puzzle.CellMagnitude;
+        var multByConn = puzzle.CellMultByConn;
+        var bonus = puzzle.PieceCellBonus;
 
-        // weight[i][cell] = contribuição da peça i na célula: valor próprio na célula,
-        // mods adjacentes entregues aos vizinhos, mods de voyage ao board inteiro.
         var weight = new double[n][];
         var eligible = new int[n][];
         var rotation = new byte[n][];
@@ -167,13 +163,6 @@ public class VoyagePlannerFast
             eligible[i] = new int[Cells];
             rotation[i] = new byte[Cells * 16];
             rotation[i].AsSpan().Fill(byte.MaxValue);
-
-            for (var cell = 0; cell < Cells; cell++)
-            {
-                weight[i][cell] = piece.OwnModifier * m[cell] +
-                                  piece.LocalModifier * mNeighbours[cell] +
-                                  piece.GlobalModifier * mTotal;
-            }
 
             // Quais conjuntos de braços internos a peça apresenta em cada célula,
             // e uma rotação por conjunto (braços para fora do grid são livres).
@@ -191,12 +180,57 @@ public class VoyagePlannerFast
             }
         }
 
+        var cellMult = new double[Cells];
+        var cellNeighbours = new double[Cells];
+
+        // weight[i][cell] para a topologia dada: magnitude × (próprio×M +
+        // adjacente×ΣM(vizinhos) + voyage×ΣM) + bônus posicional.
+        void BuildWeights(int[] topo)
+        {
+            var mTotal = 0.0;
+            for (var cell = 0; cell < Cells; cell++)
+            {
+                cellMult[cell] = multByConn != null
+                    ? multByConn[cell][BitOperations.PopCount((uint)topo[cell])]
+                    : m[cell];
+                mTotal += cellMult[cell];
+            }
+
+            for (var cell = 0; cell < Cells; cell++)
+            {
+                cellNeighbours[cell] = 0;
+                var r = cell / GridSize;
+                var c = cell % GridSize;
+                foreach (var (_, dr, dc) in Dirs)
+                {
+                    var nr = r + dr;
+                    var nc = c + dc;
+                    if (nr < 0 || nr >= GridSize || nc < 0 || nc >= GridSize) continue;
+                    cellNeighbours[cell] += cellMult[nr * GridSize + nc];
+                }
+            }
+
+            for (var i = 0; i < n; i++)
+            {
+                var piece = pieces[i];
+                for (var cell = 0; cell < Cells; cell++)
+                {
+                    weight[i][cell] = (magF?[cell] ?? 1.0) *
+                                      (piece.OwnModifier * cellMult[cell] +
+                                       piece.LocalModifier * cellNeighbours[cell] +
+                                       piece.GlobalModifier * mTotal) +
+                                      (bonus?[i][cell] ?? 0);
+                }
+            }
+        }
+
         var reachable = new int[Topologies.Length][];
         var bound = new double[Topologies.Length];
 
         for (var t = 0; t < Topologies.Length; t++)
         {
             var topo = Topologies[t];
+            BuildWeights(topo);
             var allow = new int[n];
             var total = 0.0;
             var feasible = true;
@@ -244,6 +278,7 @@ public class VoyagePlannerFast
             }
 
             explored++;
+            BuildWeights(Topologies[t]); // o buffer guarda a ÚLTIMA topologia do loop de bounds
             var score = BestAssignment(n, weight, reachable[t], dpPrev, dpNext, choice, assignment);
             if (double.IsNegativeInfinity(score)) continue;
             if (top.Count >= topN && score <= top[^1].TotalScore) continue;
