@@ -20,11 +20,11 @@ public partial class DeepwaterEngagementSuite
     // presa — o flush normal só acontece na troca de instância).
     private sealed record ZoneAnalyticsRow(
         DateTime Time, string Strategy, double Minutes, int SulGain, double SulPerMin,
-        int Cells, int Chests, int Rares, int Uniques, int Div, int Ex, int Chaos, int Scarabs, int Decks);
+        int Cells, int Chests, int Bottles, int Rares, int Uniques, int Div, int Ex, int Chaos, int Scarabs, int Decks);
 
     private sealed record ChartAnalyticsRow(
         DateTime Time, string Biome, string Room, int DurSec, int SulGain,
-        int Chests, int Rares, int Uniques, int Scarabs, int Chaos, int Div, int Ex);
+        int Chests, int Bottles, int Rares, int Uniques, int Scarabs, int Chaos, int Div, int Ex);
 
     private const string AnalyticsTimeFormat = "dd/MM/yy HH:mm:ss";
 
@@ -118,11 +118,17 @@ public partial class DeepwaterEngagementSuite
                     }
 
                     var cChests = 0;
+                    var cBottles = 0;
                     if (record["chests"] is JObject cChestsObj)
                     {
                         foreach (var p in cChestsObj.Properties())
                         {
-                            cChests += (int?)p.Value ?? 0;
+                            var val = (int?)p.Value ?? 0;
+                            cChests += val;
+                            if (p.Name == "BottledItemChest")
+                            {
+                                cBottles += val;
+                            }
                         }
                     }
 
@@ -144,7 +150,7 @@ public partial class DeepwaterEngagementSuite
                         ? cdt.ToLocalTime()
                         : DateTime.MinValue;
                     charts.Add(new ChartAnalyticsRow(cTime, cBiome, (string)record["room"] ?? "", dur, gain,
-                        cChests, (int?)record["monsters"]?["Rare"] ?? 0, (int?)record["monsters"]?["Unique"] ?? 0,
+                        cChests, cBottles, (int?)record["monsters"]?["Rare"] ?? 0, (int?)record["monsters"]?["Unique"] ?? 0,
                         cScar, cChaos, cDiv, cEx));
 
                     if (!biomes.TryGetValue(cBiome, out var agg))
@@ -174,11 +180,17 @@ public partial class DeepwaterEngagementSuite
 
                 var cells = (record["cellOrder"] as JArray)?.Count(v => ((int?)v ?? 0) > 0) ?? 0;
                 var chests = 0;
+                var bottles = 0;
                 if (record["chests"] is JObject chestsObj)
                 {
                     foreach (var p in chestsObj.Properties())
                     {
-                        chests += (int?)p.Value ?? 0;
+                        var val = (int?)p.Value ?? 0;
+                        chests += val;
+                        if (p.Name == "BottledItemChest")
+                        {
+                            bottles += val;
+                        }
                     }
                 }
 
@@ -204,7 +216,7 @@ public partial class DeepwaterEngagementSuite
                 var minutes = dur / 60.0;
                 voyages.Add(new ZoneAnalyticsRow(time, string.IsNullOrEmpty(strat) ? "?" : strat,
                     minutes, gain, minutes > 0.1 ? gain / minutes : 0,
-                    cells, chests,
+                    cells, chests, bottles,
                     (int?)record["monsters"]?["Rare"] ?? 0, (int?)record["monsters"]?["Unique"] ?? 0,
                     div, ex, chaos, scarabs, decks));
             }
@@ -249,14 +261,14 @@ public partial class DeepwaterEngagementSuite
         ImGui.TextUnformatted(_analyticsChartsSummary ?? "");
 
         if (_analyticsVoyages is { Count: > 0 } &&
-            ImGui.BeginTable("zoneAnalytics", 14,
+            ImGui.BeginTable("zoneAnalytics", 15,
                 ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Sortable |
                 ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingFixedFit))
         {
             foreach (var header in new[]
                      {
                          "time", "strategy", "dur (min)", "sulphur", "sulphur/min", "cells",
-                         "chests", "rare", "unique", "divine", "exalted", "chaos", "scarabs", "decks",
+                         "chests", "bottles", "rare", "unique", "divine", "exalted", "chaos", "scarabs", "decks",
                      })
             {
                 ImGui.TableSetupColumn(header);
@@ -272,13 +284,14 @@ public partial class DeepwaterEngagementSuite
                 4 => (a, b) => a.SulPerMin.CompareTo(b.SulPerMin),
                 5 => (a, b) => a.Cells.CompareTo(b.Cells),
                 6 => (a, b) => a.Chests.CompareTo(b.Chests),
-                7 => (a, b) => a.Rares.CompareTo(b.Rares),
-                8 => (a, b) => a.Uniques.CompareTo(b.Uniques),
-                9 => (a, b) => a.Div.CompareTo(b.Div),
-                10 => (a, b) => a.Ex.CompareTo(b.Ex),
-                11 => (a, b) => a.Chaos.CompareTo(b.Chaos),
-                12 => (a, b) => a.Scarabs.CompareTo(b.Scarabs),
-                13 => (a, b) => a.Decks.CompareTo(b.Decks),
+                7 => (a, b) => a.Bottles.CompareTo(b.Bottles),
+                8 => (a, b) => a.Rares.CompareTo(b.Rares),
+                9 => (a, b) => a.Uniques.CompareTo(b.Uniques),
+                10 => (a, b) => a.Div.CompareTo(b.Div),
+                11 => (a, b) => a.Ex.CompareTo(b.Ex),
+                12 => (a, b) => a.Chaos.CompareTo(b.Chaos),
+                13 => (a, b) => a.Scarabs.CompareTo(b.Scarabs),
+                14 => (a, b) => a.Decks.CompareTo(b.Decks),
                 _ => null,
             });
             foreach (var r in _analyticsVoyages)
@@ -298,6 +311,8 @@ public partial class DeepwaterEngagementSuite
                 ImGui.TextUnformatted($"{r.Cells}/9");
                 ImGui.TableNextColumn();
                 ImGui.TextUnformatted($"{r.Chests}");
+                ImGui.TableNextColumn();
+                ImGui.TextUnformatted($"{r.Bottles}");
                 ImGui.TableNextColumn();
                 ImGui.TextUnformatted($"{r.Rares}");
                 ImGui.TableNextColumn();
@@ -367,11 +382,11 @@ public partial class DeepwaterEngagementSuite
             }
 
             if (_analyticsCharts is { Count: > 0 } &&
-                ImGui.BeginTable("chartRuns", 11,
+                ImGui.BeginTable("chartRuns", 12,
                     ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Sortable |
                     ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingFixedFit))
             {
-                foreach (var header in new[] { "time", "biome", "room", "dur (s)", "sulphur", "chests", "rare", "unique", "scarabs", "chaos", "divine/exalted" })
+                foreach (var header in new[] { "time", "biome", "room", "dur (s)", "sulphur", "chests", "bottles", "rare", "unique", "scarabs", "chaos", "divine/exalted" })
                 {
                     ImGui.TableSetupColumn(header);
                 }
@@ -385,11 +400,12 @@ public partial class DeepwaterEngagementSuite
                     3 => (a, b) => a.DurSec.CompareTo(b.DurSec),
                     4 => (a, b) => a.SulGain.CompareTo(b.SulGain),
                     5 => (a, b) => a.Chests.CompareTo(b.Chests),
-                    6 => (a, b) => a.Rares.CompareTo(b.Rares),
-                    7 => (a, b) => a.Uniques.CompareTo(b.Uniques),
-                    8 => (a, b) => a.Scarabs.CompareTo(b.Scarabs),
-                    9 => (a, b) => a.Chaos.CompareTo(b.Chaos),
-                    10 => (a, b) => (a.Div * 1000 + a.Ex).CompareTo(b.Div * 1000 + b.Ex),
+                    6 => (a, b) => a.Bottles.CompareTo(b.Bottles),
+                    7 => (a, b) => a.Rares.CompareTo(b.Rares),
+                    8 => (a, b) => a.Uniques.CompareTo(b.Uniques),
+                    9 => (a, b) => a.Scarabs.CompareTo(b.Scarabs),
+                    10 => (a, b) => a.Chaos.CompareTo(b.Chaos),
+                    11 => (a, b) => (a.Div * 1000 + a.Ex).CompareTo(b.Div * 1000 + b.Ex),
                     _ => null,
                 });
                 foreach (var r in _analyticsCharts)
@@ -407,6 +423,8 @@ public partial class DeepwaterEngagementSuite
                     ImGui.TextUnformatted($"{r.SulGain:N0}");
                     ImGui.TableNextColumn();
                     ImGui.TextUnformatted($"{r.Chests}");
+                    ImGui.TableNextColumn();
+                    ImGui.TextUnformatted($"{r.Bottles}");
                     ImGui.TableNextColumn();
                     ImGui.TextUnformatted($"{r.Rares}");
                     ImGui.TableNextColumn();
