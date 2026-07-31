@@ -113,6 +113,11 @@ public partial class DeepwaterEngagementSuite
     private Vector2? _pilotStickyPos;
     private const double PilotTargetSwitchMargin = 8;
 
+    // Coleta com prio abaixo disso é lixo (gold 8-25, clam, unique-gear 30) e
+    // não segura a expansão; acima (ducats 45+, spirits 50, chests 55+), vale
+    // varrer antes de expandir.
+    private const int PilotSweepMinPriority = 40;
+
     private static readonly Dictionary<string, int> PilotBasePriority = new()
     {
         ["GoldenLantern"] = 96,
@@ -484,17 +489,26 @@ public partial class DeepwaterEngagementSuite
             o.Prio - Vector2.Distance(_playerGridPos, o.Pos) * distPenalty -
             (IsExpansion(o) ? 0 : NetworkDist(o.Pos) * darkToll);
 
-        var next = reachable
+        // Doutrina "catar antes de expandir" (Bruno, 31/07): enquanto houver
+        // coleta que preste DENTRO da rede iluminada, ela fica com a seta até
+        // ser coletada — expansão (tiles do plano/unrevealed) só com a rede
+        // varrida. Sobras muito distantes ainda cedem via piso (score <= 0).
+        var sweep = reachable
+            .Where(o => !IsExpansion(o) && o.Prio >= PilotSweepMinPriority && NetworkDist(o.Pos) <= 0)
+            .ToList();
+        var pool = sweep.Count > 0 ? sweep : reachable;
+
+        var next = pool
             .OrderByDescending(Score)
             .Cast<(string Label, Vector2 Pos, int Prio)?>()
             .FirstOrDefault();
 
         // Alvo atual só cede para um desafiante com folga de margem — ou quando
-        // some da lista (coletado/blacklist/célula visitada).
+        // some do pool (coletado/blacklist/célula visitada/troca de doutrina).
         if (next is { } cand && _pilotStickyPos is { } sticky &&
             Vector2.Distance(cand.Pos, sticky) >= 40)
         {
-            var current = reachable
+            var current = pool
                 .Where(o => Vector2.Distance(o.Pos, sticky) < 40)
                 .Cast<(string Label, Vector2 Pos, int Prio)?>()
                 .FirstOrDefault();
