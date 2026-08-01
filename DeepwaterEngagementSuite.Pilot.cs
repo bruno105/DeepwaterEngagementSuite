@@ -384,49 +384,95 @@ public partial class DeepwaterEngagementSuite
                 }
             }
 
+            // Centro andável de cada célula, calculado uma vez (o snap é caro e
+            // agora várias peças podem apontar para a mesma célula).
+            var cellTargets = new Vector2?[3, 3];
+
+            Vector2 CellTarget(int r, int c)
+            {
+                if (cellTargets[r, c] is { } cached)
+                {
+                    return cached;
+                }
+
+                var center = new Vector2(
+                    _gridOrigin.X + (c + 0.5f) / 3f * _gridSize.X,
+                    _gridOrigin.Y + (r + 0.5f) / 3f * _gridSize.Y);
+                // Centro geométrico pode ser inandável — snap para o terreno,
+                // senão o Radar não consegue rotear e a seta vira linha reta.
+                var snapped = SnapToWalkable(center) ?? center;
+                cellTargets[r, c] = snapped;
+                return snapped;
+            }
+
             for (var r = 0; r < 3; r++)
             {
                 for (var c = 0; c < 3; c++)
                 {
-                    var idx = r * 3 + c;
-                    if (_cellFirstOrder[idx] > 0)
+                    if (_cellFirstOrder[r * 3 + c] > 0)
                     {
                         continue; // já visitado
                     }
 
-                    var center = new Vector2(
-                        _gridOrigin.X + (c + 0.5f) / 3f * _gridSize.X,
-                        _gridOrigin.Y + (r + 0.5f) / 3f * _gridSize.Y);
-                    // Centro geométrico pode ser inandável — snap para o terreno,
-                    // senão o Radar não consegue rotear e a seta vira linha reta.
-                    var target = SnapToWalkable(center) ?? center;
+                    var target = CellTarget(r, c);
                     tileObjectivePositions.Add(QuantizeTarget(target));
                     var prio = 40 + (int)(60 * _plannedMults[r, c] / maxPlanned);
                     objectives.Add(($"Tile ({r},{c}) x{_plannedMults[r, c]:F1}", target, prio));
+                }
+            }
 
-                    // Peça-chave do plano nesta célula: objetivo sintético com a
-                    // prioridade do kind (GL puxa CEDO, com decay; some quando a
-                    // célula é visitada — aí as entidades reais assumem). Cada
-                    // estratégia persegue as suas peças.
-                    if (_plannedPieceMods?[r, c] is { } placedMods)
+            // Peças-chave do plano viram objetivos sintéticos NA CÉLULA QUE RECEBE
+            // O EFEITO: mods "Adjacent*" entregam nas VIZINHAS (o Operative do
+            // centro semeia boxes nas 4 laterais; o Starfish do topo-meio nasce nas
+            // vizinhas dele), enquanto "Room:*" é self-scope e vale na própria
+            // célula (Sea Pillars/Pelagic Abyss). Antes tudo era plantado na célula
+            // da PEÇA — a seta mirava onde o conteúdo não estava.
+            var pieceTable = StrategyPieceObjectives.GetValueOrDefault(strategyName, DefaultPieceObjectives);
+            for (var r = 0; r < 3; r++)
+            {
+                for (var c = 0; c < 3; c++)
+                {
+                    if (_plannedPieceMods?[r, c] is not { } placedMods)
                     {
-                        var pieceTable = StrategyPieceObjectives.GetValueOrDefault(strategyName, DefaultPieceObjectives);
-                        foreach (var (modKey, kind) in pieceTable)
+                        continue;
+                    }
+
+                    foreach (var (modKey, kind) in pieceTable)
+                    {
+                        if (!placedMods.Any(m => m.Contains(modKey, StringComparison.OrdinalIgnoreCase)))
                         {
-                            if (placedMods.Any(m => m.Contains(modKey, StringComparison.OrdinalIgnoreCase)))
+                            continue;
+                        }
+
+                        var selfScope = modKey.StartsWith("Room:", StringComparison.OrdinalIgnoreCase);
+                        var receivers = selfScope
+                            ? [(r, c)]
+                            : new List<(int R, int C)>
                             {
-                                objectives.Add(($"{kind} ({r},{c})", target, EffectivePriority(kind)));
-                                kindCounts[kind] = kindCounts.GetValueOrDefault(kind) + 1;
+                                (r - 1, c), (r + 1, c), (r, c - 1), (r, c + 1),
+                            };
+
+                        foreach (var (tr, tc) in receivers)
+                        {
+                            if (tr < 0 || tr > 2 || tc < 0 || tc > 2 || _cellFirstOrder[tr * 3 + tc] > 0)
+                            {
+                                continue; // fora do grid ou já visitado (entidades reais assumem)
                             }
+
+                            objectives.Add(($"{kind} ({tr},{tc})", CellTarget(tr, tc), EffectivePriority(kind)));
+                            kindCounts[kind] = kindCounts.GetValueOrDefault(kind) + 1;
                         }
                     }
                 }
             }
         }
 
+        var divineStrategy = strategyName is "DivineBorder" or "DivineBoxes";
+
         // Strongboxes REAIS carregadas (spawnadas pelos box charts): o marker cache
         // só vê chests deepwater — sem isso o Pilot mandava ao BoxTile distante com
         // uma box viva do lado. Prioridade acima do tile sintético no Speedrun.
+        var nearestBoxDist = float.MaxValue;
         try
         {
             foreach (var chest in GameController.EntityListWrapper.ValidEntitiesByType[EntityType.Chest])
@@ -438,8 +484,20 @@ public partial class DeepwaterEngagementSuite
                     continue;
                 }
 
+                var boxPos = chest.GridPosNum;
+                var boxPrio = EffectivePriority("Strongbox");
+
+                // Divine: a box que caiu DENTRO da célula do border é a carga da
+                // estratégia (rolada, até 7 divines); fora dela é box comum e a
+                // doutrina manda não sair da âncora.
+                if (divineStrategy && _plannedDivineCell >= 0)
+                {
+                    boxPrio = GridCellIndex(boxPos) == _plannedDivineCell ? 125 : 60;
+                }
+
                 kindCounts["Strongbox"] = kindCounts.GetValueOrDefault("Strongbox") + 1;
-                objectives.Add(("Strongbox", chest.GridPosNum, EffectivePriority("Strongbox")));
+                objectives.Add(("Strongbox", boxPos, boxPrio));
+                nearestBoxDist = Math.Min(nearestBoxDist, Vector2.Distance(_playerGridPos, boxPos));
             }
         }
         catch
@@ -449,7 +507,6 @@ public partial class DeepwaterEngagementSuite
 
         var lanternsLeft = kindCounts.GetValueOrDefault("LanternReplenishEncounter");
         var meatfishKillPhase = strategyName == "Meatfish" && lanternsLeft == 0;
-        var divineStrategy = strategyName is "DivineBorder" or "DivineBoxes";
         if (divineStrategy || meatfishKillPhase)
         {
             try
@@ -855,6 +912,8 @@ public partial class DeepwaterEngagementSuite
         {
             "Speedrun" => settings.SpeedrunExtractMinutes.Value,
             "Meatfish" => settings.MeatfishExtractMinutes.Value,
+            // "Leave fast" com relógio: 8,9 min => 2.768 sulphur/min; 14,1 min => 1.601.
+            "AlcGo" => settings.AlcGoExtractMinutes.Value,
             _ => 0,
         };
         var overTime = extractLimit > 0 && elapsed.TotalMinutes > extractLimit;
@@ -914,6 +973,24 @@ public partial class DeepwaterEngagementSuite
             else
             {
                 ImGui.TextUnformatted(cellText);
+            }
+        }
+
+        // Passo que É o dinheiro das estratégias de box e nunca aparecia in-run:
+        // no Speedrun, juicear com Alch/Scour/Ex antes de abrir; no Divine, rolar a
+        // box (3 additional Rares = 3 div, Stream of Monsters = 4, as duas = 7).
+        if (nearestBoxDist <= 100)
+        {
+            var juiceHint = strategyName switch
+            {
+                "Speedrun" => "BOX at hand: Alch/Scour/Ex it BEFORE opening",
+                "DivineBoxes" or "DivineBorder" =>
+                    "BOX at hand: roll it BEFORE opening (3 additional Rares = 3 div, Stream of Monsters = 4)",
+                _ => null,
+            };
+            if (juiceHint != null)
+            {
+                ImGui.TextColored(Color.Yellow.ToImguiVec4(), juiceHint);
             }
         }
 

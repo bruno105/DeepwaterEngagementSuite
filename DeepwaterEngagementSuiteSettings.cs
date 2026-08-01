@@ -226,6 +226,11 @@ public class PilotSettings
     [Menu("Meatfish extract (min)", "Aviso de extracao no Meatfish")]
     public RangeNode<int> MeatfishExtractMinutes { get; set; } = new RangeNode<int>(30, 10, 90);
 
+    // Dados 31/07: AlcGo de 8,9 min rendeu 2.768 sulphur/min; a de 14,1 min caiu
+    // para 1.601 — a doutrina "leave fast" precisa do mesmo relogio das outras.
+    [Menu("Alch & Go extract (min)", "Aviso de extracao no Alch & Go (runs longas rendem menos)")]
+    public RangeNode<int> AlcGoExtractMinutes { get; set; } = new RangeNode<int>(10, 3, 30);
+
     public ColorNode ObjectiveColor { get; set; } = new ColorNode(Color.LightGreen);
 }
 
