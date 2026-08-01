@@ -133,6 +133,14 @@ public partial class DeepwaterEngagementSuite
     // perdia para o tile jackpot a 620un — o tile não paga dark water).
     private const float PilotSweepNearRadius = 400f;
 
+    // Célula só conta como EXPLORADA com tempo real dentro dela: pisar por 17s
+    // atravessando marcava "visitada", a fronteira sumia e o piso mandava
+    // extrair com um tile inteiro por fazer (Speedrun de 01/08).
+    private const double PilotCellDwellSeconds = 25;
+
+    private bool CellExplored(int index) =>
+        _cellFirstOrder[index] > 0 && _cellSeconds[index] >= PilotCellDwellSeconds;
+
     private Vector2? _extractionPos;
     private DateTime _extractionRead = DateTime.MinValue;
 
@@ -409,9 +417,9 @@ public partial class DeepwaterEngagementSuite
             {
                 for (var c = 0; c < 3; c++)
                 {
-                    if (_cellFirstOrder[r * 3 + c] > 0)
+                    if (CellExplored(r * 3 + c))
                     {
-                        continue; // já visitado
+                        continue; // já explorada de verdade (tempo dentro dela)
                     }
 
                     var target = CellTarget(r, c);
@@ -454,9 +462,9 @@ public partial class DeepwaterEngagementSuite
 
                         foreach (var (tr, tc) in receivers)
                         {
-                            if (tr < 0 || tr > 2 || tc < 0 || tc > 2 || _cellFirstOrder[tr * 3 + tc] > 0)
+                            if (tr < 0 || tr > 2 || tc < 0 || tc > 2 || CellExplored(tr * 3 + tc))
                             {
-                                continue; // fora do grid ou já visitado (entidades reais assumem)
+                                continue; // fora do grid ou já explorada (entidades reais assumem)
                             }
 
                             objectives.Add(($"{kind} ({tr},{tc})", CellTarget(tr, tc), EffectivePriority(kind)));
@@ -589,13 +597,14 @@ public partial class DeepwaterEngagementSuite
         var distPenalty = StrategyDistancePenalty.GetValueOrDefault(strategyName, 0.03);
         var darkToll = StrategyDarkWaterToll.GetValueOrDefault(strategyName, 0.08);
 
-        // Objetivos de EXPANSÃO (SÓ tiles do plano) não pagam o pedágio de dark
-        // water: a travessia até eles É a exploração — as lanterns plantadas no
-        // caminho viram rede. Unrevealed paga pedágio normal: a isenção fazia um
-        // chart do outro lado do mapa (prio 80, travessia grátis) vencer com
-        // score positivo e puxar reta eterna (31/07) — revelar chart perto da
-        // rede continua valendo; do outro lado do mapa, não.
+        // Objetivos de EXPANSÃO = APENAS o tile do plano em si (a fronteira):
+        // a travessia até ele É a exploração, as lanterns plantadas no caminho
+        // viram rede, então ele não paga dark water. CONTEÚDO de célula (BoxTile,
+        // StarfishTile, feeders) é coleta e PAGA o pedágio — sem isso um BoxTile
+        // a 1.000un puxava a seta pelo mapa e a devolvia segundos depois
+        // (Speedrun de 01/08: 12 trocas com os BoxTiles a 500-1.024un).
         bool IsExpansion((string Label, Vector2 Pos, int Prio) o) =>
+            o.Label.StartsWith("Tile (", StringComparison.Ordinal) &&
             tileObjectivePositions.Contains(QuantizeTarget(o.Pos));
 
         double Score((string Label, Vector2 Pos, int Prio) o) =>
@@ -677,6 +686,16 @@ public partial class DeepwaterEngagementSuite
                 .OrderByDescending(Score)
                 .Cast<(string Label, Vector2 Pos, int Prio)?>()
                 .FirstOrDefault();
+            // Chama não-revelada viva = conteúdo por descobrir: o mapa NÃO está
+            // varrido, então nem expansão nem EXTRACT — vai revelar. (Speedrun de
+            // 01/08 pedia extração com unrevealed em volta só porque as 9 células
+            // já tinham sido pisadas.)
+            bestExpansion ??= reachable
+                .Where(o => o.Label == "Unrevealed")
+                .OrderByDescending(Score)
+                .Cast<(string Label, Vector2 Pos, int Prio)?>()
+                .FirstOrDefault();
+
             if (bestExpansion != null)
             {
                 next = bestExpansion;
